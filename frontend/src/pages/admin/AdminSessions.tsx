@@ -8,10 +8,18 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 
 export default function AdminSessions() {
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
-  const [sessions, setSessions] = useState([
-    { id: 1, title: "CSE Year 3 - Section A", date: "Scheduled for Today at 4:00 PM", status: "Scheduled", color: "border-l-primary", badge: "bg-amber-100 text-amber-800", count: 60, groups: 15 },
-    { id: 2, title: "IT Year 2 - Section B", date: "Yesterday at 2:00 PM", status: "Completed", color: "border-l-green-500", badge: "bg-green-100 text-green-800", count: 45, groups: 9 }
-  ]);
+  const [sessions, setSessions] = useState<any[]>(() => {
+    const saved = localStorage.getItem("mz_sessions");
+    if (saved) return JSON.parse(saved);
+    return [
+      { id: 1, title: "CSE Year 3 - Section A", date: "Scheduled for Today at 4:00 PM", status: "Scheduled", color: "border-l-primary", badge: "bg-amber-100 text-amber-800", count: 60, groups: 15 },
+      { id: 2, title: "IT Year 2 - Section B", date: "Yesterday at 2:00 PM", status: "Completed", color: "border-l-green-500", badge: "bg-green-100 text-green-800", count: 45, groups: 9 }
+    ];
+  });
+  
+  React.useEffect(() => {
+    localStorage.setItem("mz_sessions", JSON.stringify(sessions));
+  }, [sessions]);
   
   const [newSession, setNewSession] = useState({ dept: "CSE", section: "Year 3 - Section A", date: "" });
 
