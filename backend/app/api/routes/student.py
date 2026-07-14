@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from asyncpg import Connection
 from app.db.connection import get_db
 from app.api.dependencies import get_current_student
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -26,6 +27,94 @@ def fmt_time(val):
         except:
             return val
     return val.strftime("%I:%M %p")
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    spdNo: Optional[str] = None
+    phone: Optional[str] = None
+    photoUrl: Optional[str] = None
+
+@router.get("/profile")
+async def get_student_profile(current_student: dict = Depends(get_current_student), conn: Connection = Depends(get_db)):
+    student_id = current_student["id"]
+    student_record = await conn.fetchrow("""
+        SELECT s.id, s.name, s.college_email, s.roll_number, s.spr_number, s.photo_url, s.phone_number,
+               d.code as department_code, d.name as department_name, y.year_level, sec.name as section
+        FROM students s
+        JOIN departments d ON s.department_id = d.id
+        JOIN years y ON s.year_id = y.id
+        JOIN sections sec ON s.section_id = sec.id
+        WHERE s.id = $1
+    """, student_id)
+    if not student_record:
+        raise HTTPException(status_code=404, detail="Student profile not found")
+        
+    return {
+        "id": str(student_record["id"]),
+        "name": student_record["name"],
+        "email": student_record["college_email"],
+        "roll": student_record["roll_number"],
+        "spdNo": student_record["spr_number"],
+        "dept": student_record["department_code"],
+        "deptName": student_record["department_name"],
+        "year": f"Year {student_record['year_level']}",
+        "section": student_record["section"],
+        "phone": student_record["phone_number"] or "",
+        "photoUrl": student_record["photo_url"] or ""
+    }
+
+@router.post("/profile")
+async def update_student_profile(
+    update_data: ProfileUpdate,
+    current_student: dict = Depends(get_current_student),
+    conn: Connection = Depends(get_db)
+):
+    student_id = current_student["id"]
+    
+    await conn.execute("""
+        UPDATE students
+        SET name = COALESCE($1, name),
+            college_email = COALESCE($2, college_email),
+            spr_number = COALESCE($3, spr_number),
+            phone_number = COALESCE($4, phone_number),
+            photo_url = COALESCE($5, photo_url),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $6
+    """, update_data.name, update_data.email, update_data.spdNo, update_data.phone, update_data.photoUrl, student_id)
+    
+    return {"success": True, "message": "Profile updated successfully"}
+
+@router.get("/leaderboard")
+async def get_department_leaderboard(current_student: dict = Depends(get_current_student), conn: Connection = Depends(get_db)):
+    department_id = current_student["department_id"]
+    
+    query = """
+        SELECT s.id as student_id, s.name as student_name, s.roll_number, d.name as department_name, 
+               COALESCE(AVG(ss.overall_score), 0) as avg_score, 
+               COUNT(ss.id) as sessions_attended
+        FROM students s
+        JOIN departments d ON s.department_id = d.id
+        LEFT JOIN student_scores ss ON s.id = ss.student_id
+        WHERE s.department_id = $1
+        GROUP BY s.id, d.name, s.name, s.roll_number
+        ORDER BY avg_score DESC, s.name ASC
+        LIMIT 100
+    """
+    rows = await conn.fetch(query, department_id)
+    
+    leaderboard_data = []
+    for index, r in enumerate(rows):
+        avg = round(float(r['avg_score']), 1)
+        leaderboard_data.append({
+            "rank": index + 1,
+            "name": r["student_name"],
+            "score": avg,
+            "roll": r["roll_number"],
+            "sessions": r["sessions_attended"]
+        })
+        
+    return leaderboard_data
 
 @router.get("/dashboard")
 async def get_student_dashboard(current_student: dict = Depends(get_current_student), conn: Connection = Depends(get_db)):

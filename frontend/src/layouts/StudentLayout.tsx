@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, CalendarClock, Radio, History, 
@@ -7,6 +7,7 @@ import {
   LogOut, Menu, X, Sun, Moon, Sparkles, ChevronRight, Hash, Star
 } from 'lucide-react';
 import { useTheme } from '../components/ThemeProvider';
+import { api } from '../services/api';
 
 const sidebarGroups = [
   {
@@ -59,17 +60,57 @@ export default function StudentLayout() {
     navigate('/login');
   };
 
-  const currentStudentStr = localStorage.getItem('current_student');
-  const student = currentStudentStr ? JSON.parse(currentStudentStr) : {
-    name: 'Student',
-    roll: 'N/A',
-    dept: 'N/A',
-    year: 'N/A',
-    section: 'N/A',
-    spdNo: 'N/A'
-  };
+  const [student, setStudent] = useState(() => {
+    const currentStudentStr = localStorage.getItem('current_student');
+    return currentStudentStr ? JSON.parse(currentStudentStr) : {
+      name: 'Student',
+      roll: 'N/A',
+      dept: 'N/A',
+      year: 'N/A',
+      section: 'N/A',
+      spdNo: 'N/A'
+    };
+  });
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await api.get('/student/profile');
+        const sData = response.data;
+        const newStudent = {
+          name: sData.name,
+          roll: sData.roll,
+          dept: sData.dept,
+          year: sData.year,
+          section: sData.section,
+          spdNo: sData.spdNo,
+          email: sData.email,
+          photoUrl: sData.photoUrl
+        };
+        localStorage.setItem('current_student', JSON.stringify(newStudent));
+        setStudent(newStudent);
+      } catch (err) {
+        console.error("Failed to fetch student profile:", err);
+      }
+    };
+    fetchProfile();
+
+    const handleStorageChange = () => {
+      const currentStudentStr = localStorage.getItem('current_student');
+      if (currentStudentStr) {
+        setStudent(JSON.parse(currentStudentStr));
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   const getInitials = (name: string) => {
+    if (!name) return "ST";
+    const parts = name.trim().split(' ');
+    if (parts.length > 1) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
     return name.substring(0, 2).toUpperCase();
   };
 
@@ -195,11 +236,15 @@ export default function StudentLayout() {
                 <div className="hidden sm:block text-right">
                   <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{student.name}</p>
                   <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400 leading-tight flex items-center justify-end gap-1 mt-0.5">
-                    <Sparkles className="w-3 h-3" /> Student
+                    <Sparkles className="w-3 h-3" /> {student.dept || 'Student'}
                   </p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-sm border-2 border-white dark:border-slate-800">
-                  {getInitials(student.name)}
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 overflow-hidden flex items-center justify-center text-white font-bold shadow-sm border-2 border-white dark:border-slate-800">
+                  {student.photoUrl ? (
+                    <img src={student.photoUrl} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    getInitials(student.name)
+                  )}
                 </div>
               </Link>
             </div>

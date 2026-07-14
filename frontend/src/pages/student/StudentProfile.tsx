@@ -1,14 +1,25 @@
 import { useState, useEffect } from 'react';
 import { User, Mail, Hash, BookOpen, Calendar, Shield, Save, Edit3, Camera } from 'lucide-react';
+import { api } from '../../services/api';
 
 export default function StudentProfile() {
   const [student, setStudent] = useState<any>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem("current_student");
-    if (stored) {
-      setStudent(JSON.parse(stored));
-    }
+    const fetchProfile = async () => {
+      try {
+        const response = await api.get('/student/profile');
+        setStudent(response.data);
+        localStorage.setItem("current_student", JSON.stringify(response.data));
+      } catch (err) {
+        console.error("Failed to fetch student profile:", err);
+        const stored = localStorage.getItem("current_student");
+        if (stored) {
+          setStudent(JSON.parse(stored));
+        }
+      }
+    };
+    fetchProfile();
   }, []);
 
   if (!student) {
@@ -103,10 +114,19 @@ export default function StudentProfile() {
 
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1">
-                  <Hash className="w-3.5 h-3.5" /> Roll / SPR Number
+                  <Hash className="w-3.5 h-3.5" /> Roll Number
                 </label>
                 <div className="font-medium text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-950/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
                   {student.roll}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                  <Hash className="w-3.5 h-3.5" /> SPR Number
+                </label>
+                <div className="font-medium text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-950/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                  {student.spdNo}
                 </div>
               </div>
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { api } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,39 +25,69 @@ export default function StudentSettings() {
   });
 
   useEffect(() => {
-    const currentStudentStr = localStorage.getItem("current_student");
-    if (currentStudentStr) {
-      const s = JSON.parse(currentStudentStr);
-      setProfile({
-        name: s.name || "",
-        spdNo: s.spdNo || "SPD12345", 
-        email: s.email || `${s.roll?.toLowerCase() || 'student'}@mountzion.ac.in`,
-        phone: s.phone || "",
-        roll: s.roll || "",
-        department: s.dept || "",
-        year: s.year || "",
-        section: s.section || "Section A",
-        photoUrl: s.photoUrl || ""
-      });
-    }
+    const fetchProfile = async () => {
+      try {
+        const response = await api.get('/student/profile');
+        const s = response.data;
+        setProfile({
+          name: s.name || "",
+          spdNo: s.spdNo || "",
+          email: s.email || "",
+          phone: s.phone || "",
+          roll: s.roll || "",
+          department: s.dept || "",
+          year: s.year || "",
+          section: s.section || "",
+          photoUrl: s.photoUrl || ""
+        });
+        localStorage.setItem("current_student", JSON.stringify(s));
+      } catch (err) {
+        console.error("Failed to fetch student profile:", err);
+        const currentStudentStr = localStorage.getItem("current_student");
+        if (currentStudentStr) {
+          const s = JSON.parse(currentStudentStr);
+          setProfile({
+            name: s.name || "",
+            spdNo: s.spdNo || "", 
+            email: s.email || `${s.roll?.toLowerCase() || 'student'}@mountzion.ac.in`,
+            phone: s.phone || "",
+            roll: s.roll || "",
+            department: s.dept || "",
+            year: s.year || "",
+            section: s.section || "Section A",
+            photoUrl: s.photoUrl || ""
+          });
+        }
+      }
+    };
+    fetchProfile();
   }, []);
 
-  const handleUpdateProfile = () => {
-    const currentStudentStr = localStorage.getItem("current_student");
-    if (currentStudentStr) {
-      const s = JSON.parse(currentStudentStr);
-      s.name = profile.name;
-      s.spdNo = profile.spdNo;
-      s.email = profile.email;
-      s.phone = profile.phone;
-      s.photoUrl = profile.photoUrl;
-      localStorage.setItem("current_student", JSON.stringify(s));
+  const handleUpdateProfile = async () => {
+    try {
+      const payload = {
+        name: profile.name,
+        email: profile.email,
+        spdNo: profile.spdNo,
+        phone: profile.phone,
+        photoUrl: profile.photoUrl
+      };
       
-      const storedStudents = JSON.parse(localStorage.getItem("mz_students") || "[]");
-      const updatedStudents = storedStudents.map((stu: any) => stu.roll === s.roll ? s : stu);
-      localStorage.setItem("mz_students", JSON.stringify(updatedStudents));
-      
-      alert("Profile updated successfully!");
+      const response = await api.post('/student/profile', payload);
+      if (response.data.success) {
+        const currentStudentStr = localStorage.getItem("current_student");
+        if (currentStudentStr) {
+          const s = JSON.parse(currentStudentStr);
+          const updated = { ...s, ...payload };
+          localStorage.setItem("current_student", JSON.stringify(updated));
+        }
+        alert("Profile updated successfully!");
+        // Refresh page or trigger dynamic update in layout by emitting a storage event
+        window.dispatchEvent(new Event("storage"));
+      }
+    } catch (err) {
+      console.error("Failed to update profile:", err);
+      alert("Failed to update profile. Please try again.");
     }
   };
 
@@ -137,7 +168,7 @@ export default function StudentSettings() {
                   <span className="font-semibold">{profile.roll}</span>
                 </div>
                 <div className="bg-slate-50 p-2 rounded text-sm flex justify-between border">
-                  <span className="text-slate-500">SPD No</span>
+                  <span className="text-slate-500">SPR No</span>
                   <span className="font-semibold">{profile.spdNo}</span>
                 </div>
               </div>
@@ -163,7 +194,7 @@ export default function StudentSettings() {
                   <Input value={profile.email} onChange={e => setProfile({...profile, email: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>SPD Number</Label>
+                  <Label>SPR Number</Label>
                   <Input value={profile.spdNo} onChange={e => setProfile({...profile, spdNo: e.target.value})} />
                 </div>
                 <div className="space-y-2">
