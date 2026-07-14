@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS departments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL UNIQUE,
     code VARCHAR(50) NOT NULL UNIQUE,
+    hod VARCHAR(255),
+    status VARCHAR(50) DEFAULT 'Active',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -209,6 +211,19 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 18. Gamification Stats
+CREATE TABLE IF NOT EXISTS gamification (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE UNIQUE,
+    xp INTEGER DEFAULT 0,
+    current_level INTEGER DEFAULT 1,
+    daily_streak INTEGER DEFAULT 0,
+    last_practice_date DATE,
+    badges JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Triggers for updated_at timestamps
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
@@ -222,3 +237,4 @@ CREATE TRIGGER update_department_modtime BEFORE UPDATE ON departments FOR EACH R
 CREATE TRIGGER update_admin_modtime BEFORE UPDATE ON admins FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_student_modtime BEFORE UPDATE ON students FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
 CREATE TRIGGER update_session_modtime BEFORE UPDATE ON discussion_sessions FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+CREATE TRIGGER update_gamification_modtime BEFORE UPDATE ON gamification FOR EACH ROW EXECUTE PROCEDURE update_modified_column();

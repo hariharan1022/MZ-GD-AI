@@ -1,138 +1,303 @@
-import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Search, Plus, Upload, Edit, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Plus, Upload, Edit, Trash2, Users, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { api } from "@/services/api";
 
 export default function AdminStudents() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   
-  // Dynamic state for students so the UI updates
-  const [students, setStudents] = useState<any[]>(() => {
-    const saved = localStorage.getItem("mz_students");
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: 1, roll: "2026CSE101", name: "Student 1", dept: "CSE", year: "Year 3", section: "Section A" },
-      { id: 2, roll: "2026CSE102", name: "Student 2", dept: "CSE", year: "Year 3", section: "Section A" }
-    ];
-  });
+  const [students, setStudents] = useState<any[]>([]);
 
-  // Sync to local storage whenever students change
+  const fetchStudents = async () => {
+    try {
+      const response = await api.get("/admin/students");
+      const formattedStudents = response.data.map((s: any) => ({
+        id: s.id,
+        roll: s.roll_number,
+        name: s.name,
+        dept: s.department_name || "CSE",
+        year: s.year_level ? `Year ${s.year_level}` : "Year 1",
+        section: s.section_name || "Section A"
+      }));
+      setStudents(formattedStudents);
+    } catch (err) {
+      console.error("Failed to fetch students", err);
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem("mz_students", JSON.stringify(students));
-  }, [students]);
+    fetchStudents();
+  }, []);
 
-  // Form state for adding new student
   const [newStudent, setNewStudent] = useState({
     firstName: "", lastName: "", roll: "", email: "", dept: "CSE", year: "Year 3"
   });
 
-  const handleAddStudent = () => {
+  const handleAddStudent = async () => {
     if (!newStudent.firstName || !newStudent.roll) {
       alert("Please enter at least First Name and Roll Number");
       return;
     }
     
-    if (students.find(s => s.roll === newStudent.roll)) {
-      alert("A student with this Roll Number already exists!");
-      return;
+    try {
+      const s = {
+        roll: newStudent.roll,
+        name: `${newStudent.firstName} ${newStudent.lastName}`.trim(),
+        dept: newStudent.dept,
+        year: newStudent.year,
+        section: "Section A"
+      };
+      await api.post("/admin/students/bulk", [s]);
+      await fetchStudents();
+      setIsAddOpen(false);
+      setNewStudent({ firstName: "", lastName: "", roll: "", email: "", dept: "CSE", year: "Year 3" });
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to add student");
     }
-    
-    const s = {
-      id: Date.now(),
-      roll: newStudent.roll,
-      name: `${newStudent.firstName} ${newStudent.lastName}`.trim(),
-      dept: newStudent.dept,
-      year: newStudent.year,
-      section: "Section A" // default for simulation
-    };
-    
-    setStudents([...students, s]);
-    setIsAddOpen(false);
-    setNewStudent({ firstName: "", lastName: "", roll: "", email: "", dept: "CSE", year: "Year 3" });
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: string) => {
     if(window.confirm("Are you sure you want to delete this student?")) {
-      setStudents(students.filter(s => s.id !== id));
+      try {
+        await api.delete(`/admin/students/${id}`);
+        await fetchStudents();
+      } catch (err: any) {
+        alert(err.response?.data?.detail || "Failed to delete student");
+      }
     }
+  };
+
+  const handleClearAll = () => {
+    alert("Clear All disabled for safety in production backend. Use database operations for bulk delete.");
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Student Management</h1>
-          <p className="text-muted-foreground">
-            Manage students, import lists, and monitor activity.
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Users className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+            Student Management
+          </h1>
+          <p className="text-slate-500 mt-1">Manage all registered students, upload batch lists, and update details.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-3">
+          <button 
+            onClick={handleClearAll}
+            className="flex items-center gap-2 px-4 py-2 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 rounded-lg text-sm font-medium hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors shadow-sm"
+          >
+            <Trash2 className="w-4 h-4" />
+            Clear All
+          </button>
+
           <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="flex items-center gap-2"><Upload className="w-4 h-4" /> Import Excel</Button>
+              <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm">
+                <Upload className="w-4 h-4 text-slate-500" />
+                Import Excel
+              </button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>Import Students</DialogTitle>
-                <DialogDescription>Upload an Excel (.xlsx) or CSV file containing student data.</DialogDescription>
+                <DialogTitle>Bulk Import Students</DialogTitle>
+                <DialogDescription>Upload a .csv or .xlsx file to register multiple students at once.</DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label>File Upload</Label>
-                  <Input type="file" accept=".xlsx,.csv" />
-                </div>
+              <div className="py-6 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950/50">
+                <Upload className="w-8 h-8 text-slate-400 mb-2" />
+                <p className="text-sm text-slate-600 dark:text-slate-400">Drag and drop file here, or click to browse</p>
+                <input 
+                  type="file" 
+                  accept=".xlsx,.xls,.csv" 
+                  className="hidden" 
+                  id="file-upload" 
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                      try {
+                        const data = event.target?.result;
+                        const xlsx = await import('xlsx');
+                        const workbook = xlsx.read(data, { type: 'binary' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        
+                        // Read as 2D array for maximum robustness against weird headers
+                        const rawRows = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as any[][];
+                        
+                        if (rawRows.length > 0) {
+                          // Find the header row by scoring keywords
+                          let headerIdx = 0;
+                          let maxMatches = 0;
+                          for (let i = 0; i < Math.min(10, rawRows.length); i++) {
+                            const row = rawRows[i].map(c => String(c).toLowerCase().replace(/[^a-z]/g, ''));
+                            let matches = 0;
+                            if (row.some(c => c.includes('name'))) matches++;
+                            if (row.some(c => c.includes('roll') || c.includes('reg') || c.includes('spr'))) matches++;
+                            if (row.some(c => c.includes('email') || c.includes('mail'))) matches++;
+                            if (row.some(c => c.includes('dept') || c.includes('branch'))) matches++;
+                            if (matches > maxMatches) {
+                              maxMatches = matches;
+                              headerIdx = i;
+                            }
+                          }
+
+                          const headers = rawRows[headerIdx].map(c => String(c).toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+                          let colName = headers.findIndex(h => h === 'name' || h.includes('studentname') || h === 'firstname');
+                          let colLast = headers.findIndex(h => h === 'lastname');
+                          let colRoll = headers.findIndex(h => h.includes('roll') || h.includes('reg') || h.includes('spr'));
+                          let colDept = headers.findIndex(h => h.includes('dept') || h.includes('branch'));
+                          let colYear = headers.findIndex(h => h.includes('year'));
+                          let colSec = headers.findIndex(h => h.includes('sec'));
+
+                          // Fallbacks if no recognizable headers
+                          if (colName === -1) colName = 0;
+                          if (colRoll === -1) colRoll = headers.length > 2 ? 2 : 1;
+                          if (colDept === -1) colDept = headers.length > 4 ? 4 : -1;
+                          if (colYear === -1) colYear = headers.length > 5 ? 5 : -1;
+
+                          const newStudents = [];
+                          for (let i = headerIdx + 1; i < rawRows.length; i++) {
+                            const row = rawRows[i];
+                            if (!row || row.length === 0 || row.every(c => !String(c).trim())) continue;
+                            
+                            let fname = String(row[colName] || '').trim();
+                            let lname = colLast !== -1 ? String(row[colLast] || '').trim() : '';
+                            let finalName = lname ? `${fname} ${lname}` : fname;
+                            if (!finalName) finalName = 'Unknown Student';
+
+                            let colEmail = headers.findIndex(h => h.includes('email') || h.includes('mail'));
+                            if (colEmail === -1) colEmail = headers.length > 3 ? 3 : -1;
+                            
+                            let emailStr = colEmail !== -1 ? String(row[colEmail] || '').trim() : '';
+
+                            let rawRoll = String(row[colRoll] || '').trim();
+                            if (rawRoll.includes('E+') || rawRoll.includes('e+')) {
+                              // Excel corrupted the long roll number into scientific notation.
+                              // Recover it by extracting the digits from their email (e.g. adithya9864@... -> 9864)
+                              const emailMatch = emailStr.match(/\d+/);
+                              if (emailMatch && emailMatch[0]) {
+                                // Assuming the prefix is 91172420 or 91172421
+                                const digits = emailMatch[0];
+                                const prefix = digits.length >= 5 ? "9117242" : "91172420";
+                                rawRoll = prefix + digits;
+                              } else {
+                                try {
+                                  rawRoll = Number(rawRoll).toLocaleString('fullwide', {useGrouping:false});
+                                } catch(e) {}
+                              }
+                            }
+                            const finalRoll = rawRoll || `EMP${Math.floor(Math.random() * 10000)}`;
+                            
+                            // Skip if we accidentally parsed a header row
+                            if (finalRoll.toLowerCase().includes('roll') || finalRoll.toLowerCase().includes('spr')) continue;
+
+                            let dept = colDept !== -1 ? String(row[colDept] || '').trim().toUpperCase() : 'CSE';
+                            if (!dept) dept = 'CSE';
+                            
+                            let year = colYear !== -1 ? String(row[colYear] || '').trim() : 'Year 1';
+                            if (!year.toLowerCase().includes('year')) year = `Year ${year || 1}`;
+                            
+                            let sec = colSec !== -1 ? String(row[colSec] || '').trim() : 'Section A';
+                            if (!sec) sec = 'Section A';
+
+                            newStudents.push({
+                              id: Date.now() + i,
+                              roll: finalRoll,
+                              name: finalName,
+                              dept,
+                              year,
+                              section: sec
+                            });
+                          }
+                          
+                          if (newStudents.length > 0) {
+                            try {
+                              const response = await api.post("/admin/students/bulk", newStudents);
+                              alert(response.data.message || `Successfully imported ${response.data.imported_count} students!`);
+                              await fetchStudents();
+                              setIsImportOpen(false);
+                            } catch (err: any) {
+                              console.error(err);
+                              alert(err.response?.data?.detail || "Failed to import students to the backend.");
+                            }
+                          } else {
+                            alert("No valid student data found in the Excel file.");
+                          }
+                        } else {
+                          alert("Excel file appears to be empty.");
+                        }
+                      } catch (error) {
+                        console.error("Error parsing Excel:", error);
+                        alert("Failed to parse the file. Please ensure it is a valid Excel or CSV file.");
+                      }
+                    };
+                    reader.readAsBinaryString(file);
+                  }}
+                />
+                <label htmlFor="file-upload" className="mt-4 px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-medium cursor-pointer hover:bg-indigo-100 transition-colors">
+                  Select File
+                </label>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsImportOpen(false)}>Cancel</Button>
-                <Button onClick={() => { alert("Importing..."); setIsImportOpen(false); }}>Upload & Import</Button>
+                <button className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900" onClick={() => setIsImportOpen(false)}>Cancel</button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
 
+          <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm">
+            <Download className="w-4 h-4 text-slate-500" />
+            Export
+          </button>
+
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
-              <Button className="flex items-center gap-2"><Plus className="w-4 h-4" /> Add Student</Button>
+              <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm">
+                <Plus className="w-4 h-4" />
+                Add Student
+              </button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>Add New Student</DialogTitle>
                 <DialogDescription>Manually register a single student to the platform.</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>First Name</Label>
-                    <Input placeholder="John" value={newStudent.firstName} onChange={e => setNewStudent({...newStudent, firstName: e.target.value})} />
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">First Name</label>
+                    <input className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" placeholder="John" value={newStudent.firstName} onChange={e => setNewStudent({...newStudent, firstName: e.target.value})} />
                   </div>
-                  <div className="grid gap-2">
-                    <Label>Last Name</Label>
-                    <Input placeholder="Doe" value={newStudent.lastName} onChange={e => setNewStudent({...newStudent, lastName: e.target.value})} />
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Last Name</label>
+                    <input className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" placeholder="Doe" value={newStudent.lastName} onChange={e => setNewStudent({...newStudent, lastName: e.target.value})} />
                   </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label>Roll Number</Label>
-                  <Input placeholder="2026CSE123" value={newStudent.roll} onChange={e => setNewStudent({...newStudent, roll: e.target.value})} />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Roll Number</label>
+                  <input className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" placeholder="2026CSE123" value={newStudent.roll} onChange={e => setNewStudent({...newStudent, roll: e.target.value})} />
                 </div>
-                <div className="grid gap-2">
-                  <Label>Email</Label>
-                  <Input placeholder="john@mountzion.ac.in" type="email" value={newStudent.email} onChange={e => setNewStudent({...newStudent, email: e.target.value})} />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
+                  <input className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" placeholder="john@mountzion.ac.in" type="email" value={newStudent.email} onChange={e => setNewStudent({...newStudent, email: e.target.value})} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Department</Label>
-                    <select className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2" value={newStudent.dept} onChange={e => setNewStudent({...newStudent, dept: e.target.value})}>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department</label>
+                    <select className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" value={newStudent.dept} onChange={e => setNewStudent({...newStudent, dept: e.target.value})}>
                       <option>CSE</option>
                       <option>IT</option>
                       <option>ECE</option>
+                      <option>MECH</option>
+                      <option>CIVIL</option>
                     </select>
                   </div>
-                  <div className="grid gap-2">
-                    <Label>Year</Label>
-                    <select className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2" value={newStudent.year} onChange={e => setNewStudent({...newStudent, year: e.target.value})}>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Year</label>
+                    <select className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" value={newStudent.year} onChange={e => setNewStudent({...newStudent, year: e.target.value})}>
                       <option>Year 1</option>
                       <option>Year 2</option>
                       <option>Year 3</option>
@@ -142,81 +307,133 @@ export default function AdminStudents() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-                <Button onClick={handleAddStudent}>Save Student</Button>
+                <button className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900" onClick={() => setIsAddOpen(false)}>Cancel</button>
+                <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm" onClick={handleAddStudent}>Save Student</button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Student Roster</CardTitle>
-          <CardDescription>View and manage all registered students.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2 mb-6">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search students by roll number or name..." className="pl-8" />
-            </div>
-            <Button variant="secondary" onClick={() => alert("Filter applied!")}>Filter</Button>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-50/50 dark:bg-slate-950/50">
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <input 
+              placeholder="Search students by roll number or name..." 
+              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:border-indigo-500 transition-colors shadow-sm" 
+            />
           </div>
-          
-          <div className="border rounded-md">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-muted text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Roll Number</th>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Department</th>
-                  <th className="px-4 py-3 font-medium">Year</th>
-                  <th className="px-4 py-3 font-medium">Section</th>
-                  <th className="px-4 py-3 font-medium text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {students.map((student) => (
-                  <tr key={student.id} className="hover:bg-muted/50">
-                    <td className="px-4 py-3">{student.roll}</td>
-                    <td className="px-4 py-3 font-medium">{student.name}</td>
-                    <td className="px-4 py-3">{student.dept}</td>
-                    <td className="px-4 py-3">{student.year}</td>
-                    <td className="px-4 py-3">{student.section}</td>
-                    <td className="px-4 py-3 text-right flex justify-end gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
+            <select className="w-full sm:w-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500">
+              <option>All Departments</option>
+              <option>CSE</option>
+              <option>IT</option>
+              <option>ECE</option>
+            </select>
+            <select className="w-full sm:w-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500">
+              <option>All Years</option>
+              <option>Year 1</option>
+              <option>Year 2</option>
+              <option>Year 3</option>
+              <option>Year 4</option>
+            </select>
+          </div>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className="px-6 py-3.5 font-medium whitespace-nowrap">Roll Number</th>
+                <th className="px-6 py-3.5 font-medium whitespace-nowrap">Name</th>
+                <th className="px-6 py-3.5 font-medium whitespace-nowrap">Department</th>
+                <th className="px-6 py-3.5 font-medium whitespace-nowrap">Year</th>
+                <th className="px-6 py-3.5 font-medium whitespace-nowrap">Section</th>
+                <th className="px-6 py-3.5 font-medium text-right whitespace-nowrap">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              {students.map((student) => (
+                <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                  <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{student.roll}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                        {student.name.substring(0, 2).toUpperCase()}
+                      </div>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{student.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      {student.dept}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{student.year}</td>
+                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{student.section}</td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-1">
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button variant="ghost" size="icon"><Edit className="w-4 h-4" /></Button>
+                          <button className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-md transition-colors">
+                            <Edit className="w-4 h-4" />
+                          </button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent className="sm:max-w-[425px]">
                           <DialogHeader>
                             <DialogTitle>Edit Student ({student.roll})</DialogTitle>
                             <DialogDescription>Modify student details.</DialogDescription>
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
-                            <div className="grid gap-2"><Label>Name</Label><Input defaultValue={student.name} /></div>
-                            <div className="grid gap-2"><Label>Department</Label><Input defaultValue={student.dept} /></div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Name</label>
+                              <input className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" defaultValue={student.name} />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department</label>
+                              <input className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" defaultValue={student.dept} />
+                            </div>
                           </div>
                           <DialogFooter>
-                            <Button onClick={() => alert("Saved!")}>Save Changes</Button>
+                            <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors" onClick={() => alert("Saved!")}>Save Changes</button>
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
-                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(student.id)}><Trash2 className="w-4 h-4" /></Button>
-                    </td>
-                  </tr>
-                ))}
-                {students.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="text-center py-4 text-muted-foreground">No students found.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                      <button 
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-md transition-colors"
+                        onClick={() => handleDelete(student.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {students.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center py-12 text-slate-500">
+                    <div className="flex flex-col items-center justify-center">
+                      <Users className="w-12 h-12 text-slate-300 dark:text-slate-700 mb-4" />
+                      <p>No students found.</p>
+                      <p className="text-sm mt-1">Add a new student or import a list to get started.</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        
+        {/* Pagination placeholder */}
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-950/50 text-sm">
+          <p className="text-slate-500">Showing <span className="font-medium text-slate-900 dark:text-white">1</span> to <span className="font-medium text-slate-900 dark:text-white">{students.length}</span> of <span className="font-medium text-slate-900 dark:text-white">{students.length}</span> results</p>
+          <div className="flex gap-1">
+            <button className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50" disabled>Prev</button>
+            <button className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50" disabled>Next</button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

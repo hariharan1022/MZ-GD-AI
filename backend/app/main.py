@@ -1,6 +1,7 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api import router as api_router
-from app.db.connection import connect_to_db, close_db_connection
+from app.db.connection import db
 
 app = FastAPI(
     title="AI Group Discussion Platform API",
@@ -8,13 +9,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.on_event("startup")
 async def startup_event():
-    await connect_to_db(app)
+    await db.connect()
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    await close_db_connection(app)
+    await db.disconnect()
 
 app.include_router(api_router, prefix="/api")
 

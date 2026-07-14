@@ -1,0 +1,10 @@
+- `[ ]` Update `gamification` table schema if needed, or rely on existing JSONB for badges.
+- `[ ]` Create `/api/student/leaderboard` endpoint.
+- `[ ]` Update `/api/student/dashboard` to calculate average communication score from `ai_analytics` and parse badges.
+- `[ ]` Create `/api/admin/overview` endpoint for system analytics (total students, active sessions, avg scores).
+- `[ ]` Create `/api/admin/sessions` endpoint to fetch sessions with participant counts (e.g. 44 students, 10 groups).
+- `[ ]` Update `Leaderboard.tsx` to fetch from `/api/student/leaderboard`.
+- `[ ]` Update `StudentDashboard.tsx` to display real Communication Score and Badges.
+- `[ ]` Update `AdminOverview.tsx` to fetch from `/api/admin/overview`.
+- `[ ]` Update `AdminSessions.tsx` to fetch from `/api/admin/sessions`.
+- `[ ]` Create `seed_admin_data.py` to populate DB with enough data so Admin dashboard looks realistic (multiple students, sessions, analytics).

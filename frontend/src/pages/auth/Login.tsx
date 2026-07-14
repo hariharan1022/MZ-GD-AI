@@ -24,33 +24,7 @@ export default function Login() {
       return;
     }
     
-    if (role === "student") {
-      const storedStudents = JSON.parse(localStorage.getItem("mz_students") || "[]");
-      const foundStudent = storedStudents.find((s: any) => s.roll === identifier);
-      
-      if (foundStudent) {
-        const expectedPassword = foundStudent.password || "MZCET";
-        if (password === expectedPassword) {
-          localStorage.setItem("token", "dummy_student_token");
-          // Store current logged in student info
-          localStorage.setItem("current_student", JSON.stringify(foundStudent));
-          navigate("/student");
-          return;
-        } else {
-          setError("Incorrect password.");
-          return;
-        }
-      } else if (identifier === "12345" && password === "MZCET") {
-        // Fallback dummy student if no local storage exists yet
-        localStorage.setItem("token", "dummy_student_token");
-        navigate("/student");
-        return;
-      } else {
-        setError("Student not found. Please ask Admin to add you.");
-        return;
-      }
-    }
-
+    // Removed local storage bypass for students
     try {
       const endpoint = role === "admin" ? "/auth/admin/login" : "/auth/student/login";
       const payload = role === "admin" 

@@ -8,35 +8,40 @@ import DiscussionResults from "./discussion_components/DiscussionResults";
 import DiscussionHistory from "./discussion_components/DiscussionHistory";
 import DiscussionDetails from "./discussion_components/DiscussionDetails";
 import { Button } from "@/components/ui/button";
+import api from "@/lib/api";
 
 type DiscussionStage = "dashboard" | "waiting" | "live" | "results" | "details";
 
 export default function StudentDiscussions() {
   const [stage, setStage] = useState<DiscussionStage>("dashboard");
   const [student, setStudent] = useState<any>(null);
+  const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
+  const [historySessions, setHistorySessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const data = localStorage.getItem("current_student");
-    if (data) {
-      setStudent(JSON.parse(data));
-    }
+    const fetchData = async () => {
+      try {
+        const studentData = { department: 'Computer Science', section: 'A' }; // hardcode for now
+        setStudent(studentData);
+        
+        const upcomingResponse = await api.get(`/discussions/upcoming?department=${studentData.department}&section=${studentData.section}`);
+        setUpcomingSessions(upcomingResponse.data);
+
+        const historyResponse = await api.get(`/discussions/history?student_id=1`);
+        setHistorySessions(historyResponse.data);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
-  const upcomingSessions = [
-    {
-      id: 1,
-      topic: "",
-      department: student?.department || "CSE",
-      year: "Year " + (student?.year || "III"),
-      section: "Section " + (student?.section || "A"),
-      date: "Today",
-      time: "4:00 PM",
-      groupSize: 4,
-      prepTime: 2,
-      duration: 15,
-      status: "Starts Soon",
-    }
-  ];
+  if (loading) {
+    return <div className="p-10 text-center animate-pulse text-indigo-600">Loading Discussions...</div>;
+  }
 
   return (
     <div className="min-h-full">
@@ -68,6 +73,7 @@ export default function StudentDiscussions() {
               <div className="py-4"></div>
               
               <DiscussionHistory 
+                sessions={historySessions}
                 onViewDetails={(id) => setStage("details")} 
               />
             </PageWrapper>

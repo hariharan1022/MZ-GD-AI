@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from asyncpg import Connection
-from app.db.connection import get_db_connection
+from app.db.connection import get_db
 from app.models.auth import AdminLogin, StudentLogin, Token, AdminResponse, StudentResponse
 from app.db.queries.auth_queries import get_admin_by_email, get_student_by_roll_number, log_user_login
 from app.core.security import verify_password, create_access_token
@@ -8,7 +8,7 @@ from app.core.security import verify_password, create_access_token
 router = APIRouter()
 
 @router.post("/admin/login", response_model=Token)
-async def login_admin(login_data: AdminLogin, request: Request, conn: Connection = Depends(get_db_connection)):
+async def login_admin(login_data: AdminLogin, request: Request, conn: Connection = Depends(get_db)):
     admin = await get_admin_by_email(conn, login_data.email)
     if not admin or not verify_password(login_data.password, admin["password_hash"]):
         raise HTTPException(
@@ -26,7 +26,7 @@ async def login_admin(login_data: AdminLogin, request: Request, conn: Connection
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/student/login", response_model=Token)
-async def login_student(login_data: StudentLogin, request: Request, conn: Connection = Depends(get_db_connection)):
+async def login_student(login_data: StudentLogin, request: Request, conn: Connection = Depends(get_db)):
     student = await get_student_by_roll_number(conn, login_data.roll_number)
     if not student or not verify_password(login_data.password, student["password_hash"]):
         raise HTTPException(
