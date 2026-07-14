@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Users, Radio, Loader2, Sparkles, MessageSquare, Hash, UserCheck, CheckCircle2, BookOpen, Trophy, RefreshCw } from "lucide-react";
 import api from "@/lib/api";
 
@@ -9,6 +10,8 @@ export default function AIGroupDiscussion() {
   const [loading, setLoading] = useState(false);
   const [fetchingMeta, setFetchingMeta] = useState(true);
 
+  const navigate = useNavigate();
+
   const fetchMeta = async () => {
     setFetchingMeta(true);
     try {
@@ -18,7 +21,13 @@ export default function AIGroupDiscussion() {
       ]);
       setStudents(sRes.data);
       setTopics(tRes.data);
-    } catch { } finally { setFetchingMeta(false); }
+    } catch (e: any) {
+      if (e.response?.status === 404 || e.response?.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("current_student");
+        navigate("/login");
+      }
+    } finally { setFetchingMeta(false); }
   };
 
   useEffect(() => { fetchMeta(); }, []);
