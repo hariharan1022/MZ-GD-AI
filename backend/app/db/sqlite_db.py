@@ -204,6 +204,41 @@ class SQLitePool:
             "INSERT INTO students (id, roll_number, spr_number, name, college_email, password_hash, department_id, year_id, section_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (student_id, "911724205019", "SPR911724205019", "HARIHARAN S", "hariharan9665@mountzion.ac.in", student_pw, dept_id, year_id, section_id)
         )
+
+        more_students = [
+            ("PRIYA K", "911724205020", "SPR911724205020", "priya@mountzion.ac.in"),
+            ("RAHUL M", "911724205021", "SPR911724205021", "rahul@mountzion.ac.in"),
+            ("ANITHA R", "911724205022", "SPR911724205022", "anitha@mountzion.ac.in"),
+            ("VIGNESH S", "911724205023", "SPR911724205023", "vignesh@mountzion.ac.in"),
+            ("DEEPIKA L", "911724205024", "SPR911724205024", "deepika@mountzion.ac.in"),
+        ]
+        for name, roll, spr, email in more_students:
+            sid = str(uuid.uuid4())
+            await self._conn.execute(
+                "INSERT INTO students (id, roll_number, spr_number, name, college_email, password_hash, department_id, year_id, section_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (sid, roll, spr, name, email, student_pw, dept_id, year_id, section_id)
+            )
+            await self._conn.execute(
+                "INSERT INTO gamification (id, student_id, xp, current_level, daily_streak, badges) VALUES (?, ?, ?, ?, ?, ?)",
+                (str(uuid.uuid4()), sid, 500, 1, 0, "[]")
+            )
+
+        topic_data = [
+            ("Impact of AI on Modern Education", "Discuss how AI is transforming classrooms, assessments, and personalized learning.", "Technology"),
+            ("Remote Work vs Office Work", "Compare the pros and cons of working from home versus working in an office.", "Lifestyle"),
+            ("Climate Change and Individual Action", "What can individuals do to combat climate change in their daily lives?", "Environment"),
+            ("Social Media and Mental Health", "Analyze the positive and negative effects of social media on mental wellbeing.", "Society"),
+            ("The Role of Youth in Nation Building", "How can young people contribute to the development of their country?", "Society"),
+            ("Should College Education Be Free?", "Debate the merits and drawbacks of making higher education free for all.", "Education"),
+            ("Technology Addiction in Students", "Discuss the impact of smartphone and social media addiction on student life.", "Technology"),
+            ("Women in Leadership Roles", "Examine the importance of gender diversity in leadership positions.", "Society"),
+        ]
+        for title, desc, cat in topic_data:
+            await self._conn.execute(
+                "INSERT INTO discussion_topics (id, title, description, category) VALUES (?, ?, ?, ?)",
+                (str(uuid.uuid4()), title, desc, cat)
+            )
+
         await self._conn.execute(
             "INSERT INTO gamification (id, student_id, xp, current_level, daily_streak, badges) VALUES (?, ?, ?, ?, ?, ?)",
             (str(uuid.uuid4()), student_id, 1500, 3, 5, json.dumps(["Best Speaker", "Super Active"]))

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, CalendarClock, Radio, History, 
-  FileText, Mic2, Flame, Trophy, Medal, Award, 
+  FileText, Mic2, Flame, Trophy, Medal, Award, Users,
   TrendingUp, Bell, User, Settings, LifeBuoy, 
   LogOut, Menu, X, Sun, Moon, Sparkles, ChevronRight, Hash, Star
 } from 'lucide-react';
@@ -20,6 +20,7 @@ const sidebarGroups = [
     items: [
       { name: 'Upcoming Discussions', icon: CalendarClock, path: '/student/upcoming' },
       { name: 'Active Discussion', icon: Radio, path: '/student/active', highlight: true },
+      { name: 'AI Group Discussion', icon: Users, path: '/student/ai-discussion' },
       { name: 'Practice Room', icon: Mic2, path: '/student/practice' },
       { name: 'Daily Challenge', icon: Flame, path: '/student/challenge' },
     ]
