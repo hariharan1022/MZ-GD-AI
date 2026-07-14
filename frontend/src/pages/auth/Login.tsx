@@ -47,7 +47,7 @@ export default function Login() {
       <Card className="w-full max-w-md shadow-lg border-primary/20">
         <CardHeader className="space-y-1 text-center">
           <div className="flex flex-col items-center justify-center space-y-4 mb-6">
-            <img src="/mzcet-logo.jpeg" alt="MZCET Logo" className="w-20 h-20 rounded-full shadow-md object-cover" />
+            <img src={`${import.meta.env.BASE_URL}mzcet-logo.jpeg`} alt="MZCET Logo" className="w-20 h-20 rounded-full shadow-md object-cover" />
             <div className="text-center">
               <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700">MZ AI Discussion</h1>
               <p className="text-muted-foreground mt-1">Autonomous Group Discussion Platform</p>

@@ -86,7 +86,7 @@ export default function AdminLayout() {
       `}>
         <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-3 overflow-hidden whitespace-nowrap">
-            <img src="/mzcet-logo.jpeg" alt="MZCET Logo" className="w-8 h-8 rounded-lg object-cover shadow-sm flex-shrink-0" />
+            <img src={`${import.meta.env.BASE_URL}mzcet-logo.jpeg`} alt="MZCET Logo" className="w-8 h-8 rounded-lg object-cover shadow-sm flex-shrink-0" />
             {sidebarOpen && (
               <span className="font-bold text-lg bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                 MZ AI Admin

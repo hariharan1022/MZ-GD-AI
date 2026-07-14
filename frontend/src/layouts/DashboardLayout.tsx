@@ -29,7 +29,7 @@ export default function DashboardLayout({ role }: { role: "admin" | "student" })
     <>
       <div className="p-6">
         <div className="flex items-center gap-3">
-          <img src="/mzcet-logo.jpeg" alt="MZCET Logo" className="w-10 h-10 rounded-lg object-cover shadow-sm" />
+          <img src={`${import.meta.env.BASE_URL}mzcet-logo.jpeg`} alt="MZCET Logo" className="w-10 h-10 rounded-lg object-cover shadow-sm" />
           <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
             MZ AI Discussion
           </h2>
@@ -74,7 +74,7 @@ export default function DashboardLayout({ role }: { role: "admin" | "student" })
       {/* Mobile Top Bar */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b z-40 flex items-center justify-between px-4 shadow-sm">
         <div className="flex items-center gap-3">
-          <img src="/mzcet-logo.jpeg" alt="MZCET Logo" className="w-8 h-8 rounded-lg object-cover" />
+          <img src={`${import.meta.env.BASE_URL}mzcet-logo.jpeg`} alt="MZCET Logo" className="w-8 h-8 rounded-lg object-cover" />
           <span className="font-bold text-lg bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">MZ AI</span>
         </div>
         <button 
