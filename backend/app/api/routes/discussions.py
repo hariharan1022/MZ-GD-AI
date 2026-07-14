@@ -3,8 +3,139 @@ from asyncpg import Connection
 from app.db.connection import get_db
 from app.api.dependencies import get_current_student
 from typing import Optional, List
+import random
+import uuid
 
 router = APIRouter()
+
+@router.get("/students")
+async def list_students(
+    department_id: Optional[str] = None,
+    year_id: Optional[str] = None,
+    section_id: Optional[str] = None,
+    current_student: dict = Depends(get_current_student),
+    conn: Connection = Depends(get_db)
+):
+    dept_id = department_id or current_student.get("department_id")
+    yr_id = year_id or current_student.get("year_id")
+    sec_id = section_id or current_student.get("section_id")
+    students = await conn.fetch("""
+        SELECT id, roll_number, name, college_email, department_id, year_id, section_id
+        FROM students
+        WHERE department_id = $1 AND year_id = $2 AND section_id = $3
+        ORDER BY name
+    """, dept_id, yr_id, sec_id)
+    return [{
+        "id": str(r["id"]),
+        "roll_number": r["roll_number"],
+        "name": r["name"],
+        "email": r["college_email"]
+    } for r in students]
+
+@router.get("/topics")
+async def list_topics(conn: Connection = Depends(get_db)):
+    topics = await conn.fetch("SELECT id, title, description, category FROM discussion_topics ORDER BY title")
+    return [{
+        "id": str(t["id"]),
+        "title": t["title"],
+        "description": t["description"],
+        "category": t["category"]
+    } for t in topics]
+
+@router.post("/ai-start")
+async def ai_start_discussion(
+    body: dict = Body(...),
+    current_student: dict = Depends(get_current_student),
+    conn: Connection = Depends(get_db)
+):
+    from datetime import date, time, datetime
+
+    student_ids = body.get("student_ids")
+    count = body.get("count", 6)
+    dept_id = body.get("department_id") or current_student.get("department_id")
+    yr_id = body.get("year_id") or current_student.get("year_id")
+    sec_id = body.get("section_id") or current_student.get("section_id")
+
+    if student_ids and len(student_ids) > 0:
+        rows = []
+        for sid in student_ids:
+            r = await conn.fetchrow("SELECT id, roll_number, name, college_email FROM students WHERE id = $1", sid)
+            if r:
+                rows.append(r)
+    else:
+        rows = await conn.fetch(
+            "SELECT id, roll_number, name, college_email FROM students WHERE department_id = $1 AND year_id = $2 AND section_id = $3",
+            dept_id, yr_id, sec_id
+        )
+
+    if len(rows) == 0:
+        raise HTTPException(status_code=400, detail="No students found")
+
+    random.shuffle(rows)
+    selected = rows[:min(count, len(rows))]
+
+    topics = await conn.fetch("SELECT id, title, description FROM discussion_topics")
+    if topics:
+        chosen_topic = random.choice(topics)
+    else:
+        chosen_topic = {"title": "General Discussion", "description": "Open topic discussion", "id": None}
+
+    admin = await conn.fetchrow("SELECT id FROM admins LIMIT 1")
+    if not admin:
+        raise HTTPException(status_code=500, detail="No admin found")
+
+    today_str = date.today().isoformat()
+    now_str = datetime.now().strftime("%H:%M:%S")
+    session_id = str(uuid.uuid4())
+    await conn.execute("""
+        INSERT INTO discussion_sessions (id, admin_id, department_id, year_id, section_id, group_size, discussion_date, discussion_time, preparation_time_minutes, discussion_duration_minutes, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ACTIVE')
+    """, session_id, str(admin["id"]), dept_id, yr_id, sec_id, len(selected), today_str, now_str, 2, 15)
+
+    group_id = str(uuid.uuid4())
+    topic_id = str(chosen_topic["id"]) if chosen_topic["id"] else None
+    room_name = f"AI-Group-{uuid.uuid4().hex[:8]}"
+    await conn.execute("""
+        INSERT INTO discussion_groups (id, session_id, topic_id, group_number, room_name, status)
+        VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
+    """, group_id, session_id, topic_id, 1, room_name)
+
+    member_list = []
+    for i, s in enumerate(selected):
+        member_id = str(uuid.uuid4())
+        await conn.execute(
+            "INSERT INTO group_members (id, group_id, student_id, joined_at, is_online) VALUES ($1, $2, $3, datetime('now'), 1)",
+            member_id, group_id, str(s["id"])
+        )
+        member_list.append({
+            "id": str(s["id"]),
+            "name": s["name"],
+            "roll_number": s["roll_number"]
+        })
+
+    return {
+        "session": {
+            "id": session_id,
+            "status": "ACTIVE",
+            "title": chosen_topic["title"],
+            "date": today_str,
+            "time": now_str,
+            "groupSize": len(selected),
+            "prepTime": 2,
+            "duration": 15
+        },
+        "group": {
+            "id": group_id,
+            "group_number": 1,
+            "room_name": room_name,
+            "topic": chosen_topic["title"],
+            "topic_description": chosen_topic.get("description", ""),
+            "status": "ACTIVE"
+        },
+        "members": member_list,
+        "total_available": len(rows)
+    }
+
 
 @router.get("/upcoming")
 async def get_upcoming_discussions(department: str = 'Computer Science', section: str = 'A', conn: Connection = Depends(get_db)):
@@ -149,7 +280,6 @@ async def join_discussion(group_id: str = Body(..., embed=True), current_student
     if existing:
         raise HTTPException(status_code=400, detail="Already joined this group")
 
-    import uuid
     await conn.execute(
         "INSERT INTO group_members (id, group_id, student_id, joined_at, is_online) VALUES ($1, $2, $3, datetime('now'), 1)",
         str(uuid.uuid4()), group_id, student_id

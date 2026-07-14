@@ -20,6 +20,7 @@ import StudentReports from "./pages/student/StudentReports";
 import StudentAnalytics from "./pages/student/StudentAnalytics";
 import StudentAchievements from "./pages/student/StudentAchievements";
 import StudentCertificates from "./pages/student/StudentCertificates";
+import AIGroupDiscussion from "./pages/student/AIGroupDiscussion";
 import StudentNotifications from "./pages/student/StudentNotifications";
 import StudentProfile from "./pages/student/StudentProfile";
 import StudentHelp from "./pages/student/StudentHelp";
@@ -114,6 +115,7 @@ function App() {
             {/* Active Learning */}
             <Route path="upcoming" element={<StudentUpcoming />} />
             <Route path="active" element={<StudentActive />} />
+            <Route path="ai-discussion" element={<AIGroupDiscussion />} />
             <Route path="practice" element={<AIPracticeRoom />} />
             <Route path="challenge" element={<DailySpeakingChallenge />} />
             
