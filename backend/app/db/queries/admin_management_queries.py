@@ -176,8 +176,47 @@ async def create_student_bulk(conn: Connection, students_data: List[Dict[str, An
     inserted_count = 0
     updated_count = 0
     
+    # 1. Fetch existing departments, years, sections to build in-memory cache
+    dept_rows = await conn.fetch("SELECT id, name, code FROM departments")
+    dept_cache = {}
+    for r in dept_rows:
+        dept_cache[r['name'].lower()] = r['id']
+        dept_cache[r['code'].lower()] = r['id']
+        
+    year_rows = await conn.fetch("SELECT id, department_id, year_level FROM years")
+    year_cache = {}
+    for r in year_rows:
+        year_cache[(r['department_id'], r['year_level'])] = r['id']
+        
+    sec_rows = await conn.fetch("SELECT id, year_id, name FROM sections")
+    sec_cache = {}
+    for r in sec_rows:
+        sec_cache[(r['year_id'], r['name'].lower())] = r['id']
+        
+    # 2. Pre-determine inserted vs updated count in a single query
+    rolls = [s.get("roll") for s in students_data if s.get("roll")]
+    existing_rolls = set()
+    if rolls:
+        try:
+            rows = await conn.fetch("SELECT roll_number FROM students WHERE roll_number = ANY($1)", rolls)
+            existing_rolls = {r['roll_number'] for r in rows}
+        except Exception:
+            # Fallback for SQLite
+            placeholders = ",".join("?" for _ in rolls)
+            rows = await conn.fetch(f"SELECT roll_number FROM students WHERE roll_number IN ({placeholders})", *rolls)
+            existing_rolls = {r['roll_number'] for r in rows}
+            
+    for s in students_data:
+        roll = s.get("roll")
+        if roll:
+            if roll in existing_rolls:
+                updated_count += 1
+            else:
+                inserted_count += 1
+
+    upsert_args = []
     async with conn.transaction():
-        # Process each student inside transaction
+        # Process each student inside transaction to resolve/create references
         for s in students_data:
             roll = s.get("roll")
             name = s.get("name")
@@ -190,53 +229,60 @@ async def create_student_bulk(conn: Connection, students_data: List[Dict[str, An
             if not email:
                 email = f"{roll.lower()}@mountzion.ac.in" if roll else ""
             
-            # 1. Get or create Department
-            dept_row = await conn.fetchrow("SELECT id FROM departments WHERE name = $1 OR code = $1", dept_name)
-            if not dept_row:
+            # 1. Get or create Department (using cache)
+            dept_key = dept_name.lower()
+            if dept_key in dept_cache:
+                dept_id = dept_cache[dept_key]
+            else:
                 dept_row = await conn.fetchrow(
-                    "INSERT INTO departments (name, code, status) VALUES ($1, $1, 'Active') RETURNING id",
-                    dept_name
+                    "INSERT INTO departments (name, code, status) VALUES ($1, $2, 'Active') RETURNING id",
+                    dept_name, dept_name[:50]
                 )
-            dept_id = dept_row['id']
+                dept_id = dept_row['id']
+                dept_cache[dept_key] = dept_id
+                dept_cache[dept_name[:50].lower()] = dept_id
             
-            # 2. Get or create Year
+            # 2. Get or create Year (using cache)
             try:
                 year_level = int(''.join(filter(str.isdigit, year_name)))
             except ValueError:
                 year_level = 1
             year_level = max(1, min(year_level, 5))
             
-            year_row = await conn.fetchrow("SELECT id FROM years WHERE department_id = $1 AND year_level = $2", dept_id, year_level)
-            if not year_row:
+            year_key = (dept_id, year_level)
+            if year_key in year_cache:
+                year_id = year_cache[year_key]
+            else:
                 year_row = await conn.fetchrow(
                     "INSERT INTO years (department_id, year_level) VALUES ($1, $2) RETURNING id",
                     dept_id, year_level
                 )
-            year_id = year_row['id']
+                year_id = year_row['id']
+                year_cache[year_key] = year_id
             
-            # 3. Get or create Section
-            sec_row = await conn.fetchrow("SELECT id FROM sections WHERE year_id = $1 AND name = $2", year_id, sec_name)
-            if not sec_row:
+            # 3. Get or create Section (using cache)
+            sec_key = (year_id, sec_name.lower())
+            if sec_key in sec_cache:
+                sec_id = sec_cache[sec_key]
+            else:
                 sec_row = await conn.fetchrow(
                     "INSERT INTO sections (year_id, name) VALUES ($1, $2) RETURNING id",
                     year_id, sec_name
                 )
-            sec_id = sec_row['id']
+                sec_id = sec_row['id']
+                sec_cache[sec_key] = sec_id
             
-            # 4. Upsert Student (Conflict on roll_number)
             spr_number = f"SPR{roll}"
-            query = """
-                INSERT INTO students (roll_number, spr_number, name, college_email, password_hash, department_id, year_id, section_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ON CONFLICT (roll_number) DO UPDATE
-                SET name = EXCLUDED.name, college_email = EXCLUDED.college_email, password_hash = EXCLUDED.password_hash, department_id = EXCLUDED.department_id, year_id = EXCLUDED.year_id, section_id = EXCLUDED.section_id
-                RETURNING (xmax = 0) AS is_inserted;
-            """
-            res = await conn.fetchrow(query, roll, spr_number, name, email, default_password_hash, dept_id, year_id, sec_id)
-            if res['is_inserted']:
-                inserted_count += 1
-            else:
-                updated_count += 1
+            upsert_args.append((roll, spr_number, name, email, default_password_hash, dept_id, year_id, sec_id))
+            
+        # 4. Perform single bulk upsert query using executemany
+        query = """
+            INSERT INTO students (roll_number, spr_number, name, college_email, password_hash, department_id, year_id, section_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (roll_number) DO UPDATE
+            SET name = EXCLUDED.name, college_email = EXCLUDED.college_email, password_hash = EXCLUDED.password_hash, department_id = EXCLUDED.department_id, year_id = EXCLUDED.year_id, section_id = EXCLUDED.section_id;
+        """
+        await conn.executemany(query, upsert_args)
                 
     return {"inserted": inserted_count, "updated": updated_count}
 

@@ -35,6 +35,12 @@ class SQLiteConnection:
         await self._conn.commit()
         return cursor
 
+    async def executemany(self, query: str, args_list):
+        query = re.sub(r'\$(\d+)', '?', query)
+        for args in args_list:
+            await self._conn.execute(query, args)
+        await self._conn.commit()
+
     async def fetchval(self, query: str, *args):
         query = re.sub(r'\$(\d+)', '?', query)
         cursor = await self._conn.execute(query, args)
