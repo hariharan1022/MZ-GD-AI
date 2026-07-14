@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Mic, StopCircle, RefreshCw, MessageSquare, Sparkles, Send, Loader2 } from "lucide-react";
-import { api } from "@/lib/api";
+import api from "@/lib/api";
 
 export default function AIPracticeRoom() {
   const [topic, setTopic] = useState("");
