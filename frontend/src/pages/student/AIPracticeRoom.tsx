@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Mic, StopCircle, RefreshCw, MessageSquare, Sparkles, Send } from "lucide-react";
+import { Mic, StopCircle, RefreshCw, MessageSquare, Sparkles, Send, Loader2 } from "lucide-react";
+import { api } from "@/lib/api";
 
 export default function AIPracticeRoom() {
   const [topic, setTopic] = useState("");
@@ -12,44 +13,80 @@ export default function AIPracticeRoom() {
   ]);
   const [inputText, setInputText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const startPractice = () => {
-    if (!topic) {
-      setTopic("The Impact of Artificial Intelligence on Society");
-    }
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
+
+  const startPractice = async () => {
+    const finalTopic = topic || "The Impact of Artificial Intelligence on Society";
+    if (!topic) setTopic(finalTopic);
     setIsPracticing(true);
-    setMessages([
-      { role: "ai", text: `Great! Let's practice discussing: "${topic || 'The Impact of Artificial Intelligence on Society'}". I will act as a friendly moderator. You have 2 minutes to present your initial thoughts.` }
-    ]);
+    setIsLoading(true);
+    setMessages([{ role: "ai", text: "Starting practice session..." }]);
+
+    try {
+      const res = await api.post("/student/practice/start", { topic: finalTopic });
+      setMessages([{ role: "ai", text: res.data.response }]);
+    } catch {
+      setMessages([{ role: "ai", text: `Great! Let's practice discussing: "${finalTopic}". I will act as a friendly moderator. Share your initial thoughts!` }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSendText = () => {
-    if (!inputText.trim()) return;
-    setMessages([...messages, { role: "student", text: inputText }]);
+  const handleSendText = async () => {
+    if (!inputText.trim() || isLoading) return;
+    const userMsg = inputText.trim();
     setInputText("");
-    
-    // Mock AI response
-    setTimeout(() => {
-      setMessages(prev => [...prev, { 
-        role: "ai", 
-        text: "That's an excellent point! Can you elaborate on how that specific aspect might affect future job markets?" 
-      }]);
-    }, 1000);
+    const newMessages = [...messages, { role: "student" as const, text: userMsg }];
+    setMessages(newMessages);
+    setIsLoading(true);
+
+    try {
+      const res = await api.post("/student/practice/chat", {
+        topic,
+        message: userMsg,
+        history: newMessages.map(m => ({ role: m.role, text: m.text }))
+      });
+      setMessages(prev => [...prev, { role: "ai", text: res.data.response }]);
+    } catch {
+      setMessages(prev => [...prev, { role: "ai", text: "Interesting point! Could you tell me more about your perspective on this?" }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toggleRecording = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
     if (isRecording) {
+      recognitionRef.current?.stop();
       setIsRecording(false);
-      setMessages(prev => [...prev, { role: "student", text: "(Audio submission transcribed) I believe AI will automate repetitive tasks, allowing humans to focus on creative work." }]);
-      setTimeout(() => {
-        setMessages(prev => [...prev, { 
-          role: "ai", 
-          text: "Very fluent! Your grammar was mostly correct, though try using stronger transition words. Do you think this transition will happen quickly or slowly?" 
-        }]);
-      }, 1500);
-    } else {
-      setIsRecording(true);
+      return;
     }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInputText(transcript);
+      setIsRecording(false);
+    };
+
+    recognition.onerror = () => setIsRecording(false);
+    recognition.onend = () => setIsRecording(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
   };
 
   return (
@@ -123,6 +160,14 @@ export default function AIPracticeRoom() {
                   </div>
                 </div>
               ))}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-white border text-slate-800 rounded-2xl rounded-tl-sm p-4 shadow-sm">
+                    <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
             </div>
           </div>
           
@@ -144,7 +189,7 @@ export default function AIPracticeRoom() {
                 onKeyDown={e => e.key === 'Enter' && handleSendText()}
                 disabled={isRecording}
               />
-              <Button className="h-12 w-12 rounded-full shadow-sm bg-indigo-600 hover:bg-indigo-700" size="icon" onClick={handleSendText} disabled={!inputText.trim() || isRecording}>
+              <Button className="h-12 w-12 rounded-full shadow-sm bg-indigo-600 hover:bg-indigo-700" size="icon" onClick={handleSendText} disabled={!inputText.trim() || isRecording || isLoading}>
                 <Send className="w-5 h-5" />
               </Button>
             </div>
