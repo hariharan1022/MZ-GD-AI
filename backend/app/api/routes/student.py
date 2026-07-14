@@ -116,6 +116,69 @@ async def get_department_leaderboard(current_student: dict = Depends(get_current
         
     return leaderboard_data
 
+@router.get("/analytics")
+async def get_student_analytics(current_student: dict = Depends(get_current_student), conn: Connection = Depends(get_db)):
+    student_id = current_student["id"]
+    
+    query = """
+        SELECT ds.discussion_date, ds.discussion_time,
+               dt.title as topic,
+               sc.grammar_score, sc.fluency_score, sc.confidence_score, sc.overall_score
+        FROM group_members gm
+        JOIN discussion_groups dg ON gm.group_id = dg.id
+        JOIN discussion_sessions ds ON dg.session_id = ds.id
+        LEFT JOIN discussion_topics dt ON dg.topic_id = dt.id
+        JOIN student_scores sc ON dg.id = sc.group_id AND gm.student_id = sc.student_id
+        WHERE gm.student_id = $1 AND ds.status = 'COMPLETED'
+        ORDER BY ds.discussion_date ASC, ds.discussion_time ASC
+    """
+    rows = await conn.fetch(query)
+    
+    performance_history = []
+    for r in rows:
+        performance_history.append({
+            "date": fmt_date(r["discussion_date"]),
+            "topic": r["topic"] or "Group Discussion",
+            "overall": float(r["overall_score"] or 0),
+            "grammar": float(r["grammar_score"] or 0),
+            "fluency": float(r["fluency_score"] or 0),
+            "confidence": float(r["confidence_score"] or 0)
+        })
+        
+    return {
+        "history": performance_history
+    }
+
+@router.get("/reports")
+async def get_student_reports(current_student: dict = Depends(get_current_student), conn: Connection = Depends(get_db)):
+    student_id = current_student["id"]
+    
+    query = """
+        SELECT fr.id, fr.strengths, fr.weaknesses, fr.suggestions, fr.created_at,
+               dt.title as topic, sc.overall_score
+        FROM feedback_reports fr
+        JOIN student_scores sc ON fr.score_id = sc.id
+        JOIN discussion_groups dg ON sc.group_id = dg.id
+        LEFT JOIN discussion_topics dt ON dg.topic_id = dt.id
+        WHERE fr.student_id = $1
+        ORDER BY fr.created_at DESC
+    """
+    rows = await conn.fetch(query)
+    
+    reports = []
+    for r in rows:
+        reports.append({
+            "id": str(r["id"]),
+            "topic": r["topic"] or "Group Discussion",
+            "score": float(r["overall_score"] or 0),
+            "strengths": r["strengths"],
+            "weaknesses": r["weaknesses"],
+            "suggestions": r["suggestions"],
+            "date": r["created_at"].strftime("%Y-%m-%d") if r["created_at"] else "N/A"
+        })
+        
+    return reports
+
 @router.get("/dashboard")
 async def get_student_dashboard(current_student: dict = Depends(get_current_student), conn: Connection = Depends(get_db)):
     import json
