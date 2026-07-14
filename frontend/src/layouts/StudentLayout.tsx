@@ -32,7 +32,7 @@ const sidebarGroups = [
       { name: 'Progress Analytics', icon: TrendingUp, path: '/student/analytics' },
       { name: 'Leaderboard', icon: Trophy, path: '/student/leaderboard' },
       { name: 'Achievements', icon: Medal, path: '/student/achievements' },
-      { name: 'Certificates', icon: Award, path: '/student/certificates' },
+      { name: 'Credit Points', icon: Award, path: '/student/certificates' },
     ]
   },
   {
