@@ -115,136 +115,38 @@ export default function AdminStudents() {
                     const file = e.target.files?.[0];
                     if (!file) return;
                     
-                    const reader = new FileReader();
-                    reader.onload = async (event) => {
-                      try {
-                        const data = event.target?.result;
-                        const xlsx = await import('xlsx');
-                        const workbook = xlsx.read(data, { type: 'binary' });
-                        const firstSheetName = workbook.SheetNames[0];
-                        const worksheet = workbook.Sheets[firstSheetName];
-                        
-                        // Read as 2D array for maximum robustness against weird headers
-                        const rawRows = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as any[][];
-                        
-                        if (rawRows.length > 0) {
-                          // Find the header row by scoring keywords
-                          let headerIdx = 0;
-                          let maxMatches = 0;
-                          for (let i = 0; i < Math.min(10, rawRows.length); i++) {
-                            const row = rawRows[i].map(c => String(c).toLowerCase().replace(/[^a-z]/g, ''));
-                            let matches = 0;
-                            if (row.some(c => c.includes('name'))) matches++;
-                            if (row.some(c => c.includes('roll') || c.includes('reg') || c.includes('spr'))) matches++;
-                            if (row.some(c => c.includes('email') || c.includes('mail'))) matches++;
-                            if (row.some(c => c.includes('dept') || c.includes('branch'))) matches++;
-                            if (matches > maxMatches) {
-                              maxMatches = matches;
-                              headerIdx = i;
-                            }
-                          }
-
-                          const headers = rawRows[headerIdx].map(c => String(c).toLowerCase().replace(/[^a-z0-9]/g, ''));
-
-                          let colName = headers.findIndex(h => h === 'name' || h.includes('studentname') || h === 'firstname');
-                          let colLast = headers.findIndex(h => h === 'lastname');
-                          
-                          // Prioritize roll/reg over spr
-                          let colRoll = headers.findIndex(h => h === 'roll' || h === 'rollnumber' || h === 'rollno' || h.includes('register') || h.includes('regno') || h.includes('registration'));
-                          if (colRoll === -1) {
-                            colRoll = headers.findIndex(h => h.includes('roll') || h.includes('reg'));
-                          }
-                          if (colRoll === -1) {
-                            colRoll = headers.findIndex(h => h.includes('spr'));
-                          }
-
-                          let colDept = headers.findIndex(h => h.includes('dept') || h.includes('branch'));
-                          let colYear = headers.findIndex(h => h.includes('year'));
-                          let colSec = headers.findIndex(h => h.includes('sec'));
-
-                          // Fallbacks if no recognizable headers
-                          if (colName === -1) colName = 0;
-                          if (colRoll === -1) colRoll = headers.length > 2 ? 2 : 1;
-                          if (colDept === -1) colDept = headers.length > 4 ? 4 : -1;
-                          if (colYear === -1) colYear = headers.length > 5 ? 5 : -1;
-
-                          const newStudents = [];
-                          for (let i = headerIdx + 1; i < rawRows.length; i++) {
-                            const row = rawRows[i];
-                            if (!row || row.length === 0 || row.every(c => !String(c).trim())) continue;
-                            
-                            let fname = String(row[colName] || '').trim();
-                            let lname = colLast !== -1 ? String(row[colLast] || '').trim() : '';
-                            let finalName = lname ? `${fname} ${lname}` : fname;
-                            if (!finalName) finalName = 'Unknown Student';
-
-                            let colEmail = headers.findIndex(h => h.includes('email') || h.includes('mail'));
-                            if (colEmail === -1) colEmail = headers.length > 3 ? 3 : -1;
-                            
-                            let emailStr = colEmail !== -1 ? String(row[colEmail] || '').trim() : '';
-
-                            let rawRoll = '';
-                            if (colRoll !== -1 && row[colRoll] !== undefined && row[colRoll] !== null) {
-                              const cellVal = row[colRoll];
-                              if (typeof cellVal === 'number') {
-                                rawRoll = cellVal.toFixed(0);
-                              } else {
-                                rawRoll = String(cellVal).trim();
-                                if (rawRoll.includes('E+') || rawRoll.includes('e+')) {
-                                  const num = Number(rawRoll);
-                                  if (!isNaN(num)) {
-                                    rawRoll = num.toFixed(0);
-                                  }
-                                }
-                              }
-                            }
-                            const finalRoll = rawRoll || `EMP${Math.floor(Math.random() * 10000)}`;
-                            
-                            // Skip if we accidentally parsed a header row
-                            if (finalRoll.toLowerCase().includes('roll') || finalRoll.toLowerCase().includes('spr') || finalRoll.toLowerCase().includes('number')) continue;
-
-                            let dept = colDept !== -1 ? String(row[colDept] || '').trim().toUpperCase() : 'CSE';
-                            if (!dept) dept = 'CSE';
-                            
-                            let year = colYear !== -1 ? String(row[colYear] || '').trim() : 'Year 1';
-                            if (!year.toLowerCase().includes('year')) year = `Year ${year || 1}`;
-                            
-                            let sec = colSec !== -1 ? String(row[colSec] || '').trim() : 'Section A';
-                            if (!sec) sec = 'Section A';
-
-                            newStudents.push({
-                              id: Date.now() + i,
-                              roll: finalRoll,
-                              name: finalName,
-                              dept,
-                              year,
-                              section: sec,
-                              email: emailStr
-                            });
-                          }
-                          
-                          if (newStudents.length > 0) {
-                            try {
-                              const response = await api.post("/admin/students/bulk", newStudents);
-                              alert(response.data.message || `Successfully imported ${response.data.imported_count} students!`);
-                              await fetchStudents();
-                              setIsImportOpen(false);
-                            } catch (err: any) {
-                              console.error(err);
-                              alert(err.response?.data?.detail || "Failed to import students to the backend.");
-                            }
-                          } else {
-                            alert("No valid student data found in the Excel file.");
-                          }
-                        } else {
-                          alert("Excel file appears to be empty.");
+                    const formData = new FormData();
+                    formData.append("file", file);
+                    
+                    try {
+                      const response = await api.post("/admin/students/import-excel", formData, {
+                        headers: {
+                          "Content-Type": "multipart/form-data"
                         }
-                      } catch (error) {
-                        console.error("Error parsing Excel:", error);
-                        alert("Failed to parse the file. Please ensure it is a valid Excel or CSV file.");
+                      });
+                      
+                      const data = response.data;
+                      const counts = data.counts;
+                      let msg = `Excel Import Summary:\n`;
+                      msg += `- Inserted: ${counts.inserted}\n`;
+                      msg += `- Updated: ${counts.updated}\n`;
+                      msg += `- Skipped: ${counts.skipped}\n`;
+                      msg += `- Failed: ${counts.failed}\n`;
+                      
+                      if (data.errors && data.errors.length > 0) {
+                        msg += `\nErrors:\n` + data.errors.slice(0, 10).join('\n');
+                        if (data.errors.length > 10) {
+                          msg += `\n...and ${data.errors.length - 10} more errors.`;
+                        }
                       }
-                    };
-                    reader.readAsBinaryString(file);
+                      
+                      alert(msg);
+                      await fetchStudents();
+                      setIsImportOpen(false);
+                    } catch (err: any) {
+                      console.error(err);
+                      alert(err.response?.data?.detail || "Failed to import students to the backend.");
+                    }
                   }}
                 />
                 <label htmlFor="file-upload" className="mt-4 px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-medium cursor-pointer hover:bg-indigo-100 transition-colors">

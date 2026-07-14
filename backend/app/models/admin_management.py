@@ -125,3 +125,15 @@ class BulkStudentResponse(BaseModel):
     success: bool
     imported_count: int
     message: str
+
+class ExcelImportCounts(BaseModel):
+    inserted: int
+    updated: int
+    skipped: int
+    failed: int
+
+class ExcelImportResponse(BaseModel):
+    success: bool
+    message: str
+    counts: ExcelImportCounts
+    errors: List[str]
