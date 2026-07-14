@@ -41,7 +41,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     // Determine WebSocket URL based on current host (assuming backend on 8000)
-    const ws = new WebSocket('ws://localhost:8001/api/dashboard/ws');
+    const ws = new WebSocket('ws://localhost:8003/api/dashboard/ws');
     
     ws.onopen = () => setConnected(true);
     ws.onclose = () => setConnected(false);
