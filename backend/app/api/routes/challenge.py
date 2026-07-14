@@ -123,19 +123,100 @@ PATTERN_MISTAKES = [
     (r'\bhas took\b', "Use 'has taken' instead of 'has took'"),
 ]
 
+ADVERBS = ['monthly','weekly','daily','yearly','always','often','usually','sometimes','never','rarely','seldom','frequently','occasionally']
+SUPERLATIVES = ['best','most','worst','largest','smallest','greatest','biggest','highest','lowest','fastest','slowest','oldest','newest','longest','shortest','easiest','hardest']
+SINGULAR_NOW = {'week','month','year','place','person','thing','day','hour','minute','second','book','car','house','room','table','chair','city','town','village','country','state','area','region'}
+COMMON_NOUNS = {'week','month','year','place','person','thing','day','hour','minute','second','book','car','house','room','table','chair','city','town','village','country','state','area','region','tamilnadu','india','school','college','university','office','company','hospital','bank','shop','market','park','garden','beach','river','mountain','forest','temple','church','mosque','hotel','restaurant','airport','station','bus','train','plane','bicycle','phone','computer','laptop','friend','family','mother','father','brother','sister','teacher','student','doctor','engineer','manager'}
+PAST_VERBS = {'go','come','do','say','make','take','give','see','know','think','find','get','tell','buy','bring','build','catch','draw','drink','eat','feel','fight','fly','forget','grow','hide','hold','keep','lead','leave','lend','mean','meet','pay','run','sleep','stand','swim','teach'}
+PAST_MARKERS = ['yesterday','ago','last week','last month','last year','last night','last monday','last tuesday','last wednesday','last thursday','last friday','last saturday','last sunday','before','earlier','previously','in the past']
+SV_VERBS = {'like','read','write','go','do','say','make','take','come','know','think','give','find','tell','work','play','study','run','eat','speak','love','want','need','use','learn','help','keep','start','look','live','believe','call','ask','try','seem','put','get','set','bring','hold','buy','pay','show','hear','watch','walk','talk','sit','stand','win','grow','build','meet','lead','leave','cut','create','move','open','close','turn','teach','fight'}
+
 def find_mistakes(text: str) -> list:
     issues = []
     lower = text.lower()
     words = lower.split()
+    if not words: return issues
+
+    if text[0].isalpha() and text[0].islower():
+        issues.append("Capitalize the first letter of your sentence")
+
     for i, w in enumerate(words):
         clean = w.strip(".,!?;:'\"")
         if clean in COMMON_MISTAKES:
             fix, reason = COMMON_MISTAKES[clean]
             issues.append(f"Used '{clean}' instead of '{fix}' ({reason})")
+
     for pattern, msg in PATTERN_MISTAKES:
         if re.search(pattern, lower):
             issues.append(msg)
-    return issues[:5]
+
+    for sv in ['he', 'she', 'it']:
+        m = re.search(r'\b' + sv + r'\s+(' + '|'.join(SV_VERBS) + r')\b', lower)
+        if m:
+            v = m.group(1)
+            es = v + ('es' if v.endswith(('o','s','x','z','ch','sh')) else 's')
+            issues.append(f"Subject-verb: use '{sv} {es}' not '{sv} {v}'")
+
+    if re.search(r'\bthey is\b', lower):
+        issues.append("Use 'they are' instead of 'they is'")
+
+    m = re.search(r"\b(don't|doesn't)\s+(\w+s)\b", lower)
+    if m:
+        issues.append(f"After '{m.group(1)}', use base verb '{m.group(2)[:-1]}' not '{m.group(2)}'")
+
+    for marker in ['yesterday','last week','last month','last year','ago']:
+        if marker in lower:
+            for j, w in enumerate(words):
+                c = w.strip(".,!?;:'\"")
+                if c in PAST_VERBS:
+                    issues.append(f"Past tense: use past form of '{c}' (with time '{marker}')")
+                    break
+
+    for w in ['want', 'need']:
+        m2 = re.search(r'\b' + w + r'\s+(\w+)\b', lower)
+        if m2 and m2.group(1) not in ('to','a','an','the','in','on','at','for','with','by','from','and','or','but','i','you','he','she','it','we','they'):
+            issues.append(f"Use '{w} to {m2.group(1)}' (missing 'to')")
+
+    repeats = re.findall(r'\b(\w+)\s+\1\b', lower)
+    for rpt in repeats[:1]:
+        issues.append(f"Repeated word '{rpt}' — try to avoid filler repetition")
+
+    for adv in ADVERBS:
+        m = re.search(r'\b' + adv + r'\s+(' + '|'.join(SV_VERBS) + r')\b', lower)
+        if m:
+            issues.append(f"Word order: put '{adv}' after the verb (e.g. 'I go {adv}')")
+
+    m = re.search(r'\b(\d+)\s+(\w+)\b', lower)
+    if m:
+        num = int(m.group(1))
+        noun = m.group(2).strip(".,!?;:'\"")
+        if num > 1 and noun in SINGULAR_NOW:
+            issues.append(f"Plural: '{num} {noun}' should be '{num} {noun}s'")
+
+    for sup in SUPERLATIVES:
+        m = re.search(r'\ba\s+' + sup + r'\b', lower)
+        if m:
+            issues.append(f"Use 'the {sup}' instead of 'a {sup}' (superlative needs 'the')")
+            break
+
+    m = re.search(r"\bits\s+(a|an|the|is|was|will|has|have|had|very|really|quite|so|one|also|not|my|our|their|his|her|its)\b", lower)
+    if m:
+        issues.append("Use 'it's' (with apostrophe) for 'it is' — 'its' is possessive")
+
+    has_future = bool(re.search(r"\b(will|shall|'ll|going to|gonna)\b", lower))
+    has_past_marker = any(marker in lower for marker in PAST_MARKERS)
+    if has_future and has_past_marker:
+        issues.append("Use past tense instead of future tense when referring to a past time")
+
+    prep_articles = {'a','an','the','my','our','your','his','her','its','their','this','that','every','each','some','any','no','one','two'}
+    prepositions_etc = {'to','in','on','at','for','with','by','from','into','onto','upon','toward','towards','through','across','around','about','between','among','after','before','above','below','under','over','near','behind','beside','without','against','during','since','until'}
+    for i, w in enumerate(words):
+        if w in prepositions_etc and i + 1 < len(words):
+            next_w = words[i + 1].strip(".,!?;:'\"")
+            if next_w in COMMON_NOUNS and (i + 2 >= len(words) or words[i + 2].strip(".,!?;:'\"") not in prep_articles):
+                issues.append(f"Missing article before '{next_w}' (use 'a/an/the')")
+
+    return issues[:6]
 
 def calc_fluency(text: str) -> int:
     words = len(text.split())
@@ -245,6 +326,20 @@ def generate_corrected(text: str) -> str:
     result = re.sub(r'\bhave broke\b', 'have broken', result, flags=re.IGNORECASE)
     result = re.sub(r'\bhave took\b', 'have taken', result, flags=re.IGNORECASE)
     result = re.sub(r'\bhas took\b', 'has taken', result, flags=re.IGNORECASE)
+    for sup in SUPERLATIVES:
+        result = re.sub(r'\ba\s+' + sup + r'\b', 'the ' + sup, result, flags=re.IGNORECASE)
+    result = re.sub(r"\bits\s+(a|an|the)", lambda m: "it's " + m.group(1), result, flags=re.IGNORECASE)
+    result = re.sub(r'\bmonthly\s+(' + '|'.join(SV_VERBS) + r')\b', r'\1 monthly', result, flags=re.IGNORECASE)
+    result = re.sub(r'\b(\d+)\s+(week|month|year|day|hour|minute|place|person|thing)\b',
+                    lambda m: f"{m.group(1)} {m.group(2)}s" if int(m.group(1)) > 1 else m.group(0),
+                    result, flags=re.IGNORECASE)
+    result = re.sub(r'\bthey is\b', 'they are', result, flags=re.IGNORECASE)
+    result = re.sub(r'\bi\b', 'I', result)
+    result = re.sub(r'\bwill\s+(\w+)\s+before\s+(\d+)\s+(week|month|year)s?\b',
+                    lambda m: 'went ' + m.group(2) + ' ' + m.group(3) + 's ago',
+                    result, flags=re.IGNORECASE)
+    if result and result[0].islower():
+        result = result[0].upper() + result[1:]
     return result if result != text else ""
 
 async def call_ollama(prompt: str, max_tokens: int = 200, timeout: int = 60) -> str:
