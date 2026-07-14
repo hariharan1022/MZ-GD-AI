@@ -26,6 +26,7 @@ export default function DailySpeakingChallenge() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const recognitionRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
+  const transcriptRef = useRef<string>("");
 
   const pickTopic = () => {
     setTopic(TOPICS[Math.floor(Math.random() * TOPICS.length)]);
@@ -46,6 +47,7 @@ export default function DailySpeakingChallenge() {
     setElapsed(0);
     setFeedback(null);
     setTranscript("");
+    transcriptRef.current = "";
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -54,11 +56,16 @@ export default function DailySpeakingChallenge() {
       recognition.interimResults = true;
       recognition.continuous = true;
       recognition.onresult = (event: any) => {
-        let full = "";
+        let newText = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          full += event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            newText += event.results[i][0].transcript + " ";
+          }
         }
-        setTranscript((prev) => prev + " " + full);
+        if (newText) {
+          transcriptRef.current += newText;
+          setTranscript(transcriptRef.current);
+        }
       };
       recognition.onerror = () => {};
       recognitionRef.current = recognition;
@@ -82,9 +89,9 @@ export default function DailySpeakingChallenge() {
 
   const finishChallenge = async () => {
     setIsAnalyzing(true);
+    const spokenText = transcriptRef.current.trim() || "I shared my thoughts on the topic.";
     try {
-      const text = transcript.trim() || "I shared my thoughts on the topic.";
-      const res = await api.post("/student/challenge/analyze", { text, topic });
+      const res = await api.post("/student/challenge/analyze", { text: spokenText, topic });
       setFeedback(res.data);
     } catch {
       setFeedback({
