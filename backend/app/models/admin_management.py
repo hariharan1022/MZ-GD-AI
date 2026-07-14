@@ -119,6 +119,7 @@ class BulkStudentItem(BaseModel):
     dept: str
     year: str
     section: str
+    email: Optional[str] = None
 
 class BulkStudentResponse(BaseModel):
     success: bool

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from asyncpg import Connection
-from typing import List
+from typing import List, Optional
+import logging
 
 from app.db.connection import get_db
 from app.models.admin_management import (
@@ -19,11 +20,12 @@ from app.db.queries.admin_management_queries import (
     create_student, get_students, delete_student, create_student_bulk,
     create_topic, get_topics, update_topic, delete_topic,
     create_session, get_sessions, update_session_status,
-    get_groups, update_group_status
+    get_groups, update_group_status, create_audit_log
 )
 from app.core.security import hash_password
 
 router = APIRouter()
+logger = logging.getLogger("app.api.routes.admin_management")
 
 # --- Departments ---
 @router.post("/departments", response_model=DepartmentResponse, status_code=status.HTTP_201_CREATED)
@@ -141,17 +143,48 @@ async def api_delete_student(student_id: str, conn: Connection = Depends(get_db)
 
 @router.post("/students/bulk", response_model=BulkStudentResponse, status_code=status.HTTP_201_CREATED)
 async def api_create_student_bulk(students: List[BulkStudentItem], conn: Connection = Depends(get_db)):
+    print("LOG: Excel file / student data received at POST /api/admin/students/bulk")
+    
+    rows_parsed = len(students)
+    print(f"LOG: Number of rows parsed: {rows_parsed}")
+    
+    # Fetch student count before import
+    count_before = await conn.fetchval("SELECT COUNT(*) FROM students")
+    print(f"LOG: Student count before import: {count_before}")
+    print("LOG: Database table used: students")
+    
     try:
         # Default password hashed
         hashed_pw = hash_password("MZCET")
         students_data = [s.dict() for s in students]
-        imported_count = await create_student_bulk(conn, students_data, hashed_pw)
-        return BulkStudentResponse(
-            success=True, 
-            imported_count=imported_count, 
-            message=f"Successfully imported {imported_count} students"
+        
+        result = await create_student_bulk(conn, students_data, hashed_pw)
+        inserted_count = result["inserted"]
+        updated_count = result["updated"]
+        
+        print(f"LOG: Number of rows inserted: {inserted_count}")
+        print(f"LOG: Number of rows updated: {updated_count}")
+        
+        # Fetch student count after import
+        count_after = await conn.fetchval("SELECT COUNT(*) FROM students")
+        print(f"LOG: Student count after import: {count_after}")
+        
+        # Write to audit_logs
+        await create_audit_log(
+            conn, 
+            action="Student Bulk Import", 
+            details=f"Imported {inserted_count} new and updated {updated_count} students from Excel/CSV."
         )
+        
+        response = BulkStudentResponse(
+            success=True, 
+            imported_count=inserted_count + updated_count, 
+            message=f"Successfully imported {inserted_count} new students and updated {updated_count} existing students."
+        )
+        print(f"LOG: API response: {response.dict()}")
+        return response
     except Exception as e:
+        print(f"LOG ERROR: Error during bulk student import transaction: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

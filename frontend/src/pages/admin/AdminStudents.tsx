@@ -148,7 +148,16 @@ export default function AdminStudents() {
 
                           let colName = headers.findIndex(h => h === 'name' || h.includes('studentname') || h === 'firstname');
                           let colLast = headers.findIndex(h => h === 'lastname');
-                          let colRoll = headers.findIndex(h => h.includes('roll') || h.includes('reg') || h.includes('spr'));
+                          
+                          // Prioritize roll/reg over spr
+                          let colRoll = headers.findIndex(h => h === 'roll' || h === 'rollnumber' || h === 'rollno' || h.includes('register') || h.includes('regno') || h.includes('registration'));
+                          if (colRoll === -1) {
+                            colRoll = headers.findIndex(h => h.includes('roll') || h.includes('reg'));
+                          }
+                          if (colRoll === -1) {
+                            colRoll = headers.findIndex(h => h.includes('spr'));
+                          }
+
                           let colDept = headers.findIndex(h => h.includes('dept') || h.includes('branch'));
                           let colYear = headers.findIndex(h => h.includes('year'));
                           let colSec = headers.findIndex(h => h.includes('sec'));
@@ -174,26 +183,25 @@ export default function AdminStudents() {
                             
                             let emailStr = colEmail !== -1 ? String(row[colEmail] || '').trim() : '';
 
-                            let rawRoll = String(row[colRoll] || '').trim();
-                            if (rawRoll.includes('E+') || rawRoll.includes('e+')) {
-                              // Excel corrupted the long roll number into scientific notation.
-                              // Recover it by extracting the digits from their email (e.g. adithya9864@... -> 9864)
-                              const emailMatch = emailStr.match(/\d+/);
-                              if (emailMatch && emailMatch[0]) {
-                                // Assuming the prefix is 91172420 or 91172421
-                                const digits = emailMatch[0];
-                                const prefix = digits.length >= 5 ? "9117242" : "91172420";
-                                rawRoll = prefix + digits;
+                            let rawRoll = '';
+                            if (colRoll !== -1 && row[colRoll] !== undefined && row[colRoll] !== null) {
+                              const cellVal = row[colRoll];
+                              if (typeof cellVal === 'number') {
+                                rawRoll = cellVal.toFixed(0);
                               } else {
-                                try {
-                                  rawRoll = Number(rawRoll).toLocaleString('fullwide', {useGrouping:false});
-                                } catch(e) {}
+                                rawRoll = String(cellVal).trim();
+                                if (rawRoll.includes('E+') || rawRoll.includes('e+')) {
+                                  const num = Number(rawRoll);
+                                  if (!isNaN(num)) {
+                                    rawRoll = num.toFixed(0);
+                                  }
+                                }
                               }
                             }
                             const finalRoll = rawRoll || `EMP${Math.floor(Math.random() * 10000)}`;
                             
                             // Skip if we accidentally parsed a header row
-                            if (finalRoll.toLowerCase().includes('roll') || finalRoll.toLowerCase().includes('spr')) continue;
+                            if (finalRoll.toLowerCase().includes('roll') || finalRoll.toLowerCase().includes('spr') || finalRoll.toLowerCase().includes('number')) continue;
 
                             let dept = colDept !== -1 ? String(row[colDept] || '').trim().toUpperCase() : 'CSE';
                             if (!dept) dept = 'CSE';
@@ -210,7 +218,8 @@ export default function AdminStudents() {
                               name: finalName,
                               dept,
                               year,
-                              section: sec
+                              section: sec,
+                              email: emailStr
                             });
                           }
                           
