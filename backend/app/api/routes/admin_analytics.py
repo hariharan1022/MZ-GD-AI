@@ -8,10 +8,18 @@ from app.db.queries.admin_analytics_queries import (
     get_department_comparison,
     get_monthly_trends,
     get_student_reports,
-    get_attendance_records
+    get_attendance_records,
+    get_overview_stats
 )
 
 router = APIRouter()
+
+@router.get("/analytics/overview")
+async def api_get_analytics_overview(conn: Connection = Depends(get_db)):
+    try:
+        return await get_overview_stats(conn)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/analytics/summary")
 async def api_get_analytics_summary(conn: Connection = Depends(get_db)):

@@ -85,3 +85,36 @@ async def get_attendance_records(conn: Connection) -> List[Dict[str, Any]]:
     """
     rows = await conn.fetch(query)
     return [dict(row) for row in rows]
+
+async def get_overview_stats(conn: Connection) -> Dict[str, Any]:
+    # 1. Total Students
+    total_students = await conn.fetchval("SELECT COUNT(*) FROM students")
+    
+    # 2. Total Departments
+    total_departments = await conn.fetchval("SELECT COUNT(*) FROM departments")
+    
+    # 3. Active Discussions (Scheduled/In Progress)
+    active_discussions = await conn.fetchval("SELECT COUNT(*) FROM discussion_sessions WHERE status IN ('IN_PROGRESS', 'SCHEDULED')")
+    
+    # 4. Recent Activity Logs from audit_logs
+    # Fallback to general log messages if table is empty
+    logs = await conn.fetch("""
+        SELECT action, details, created_at 
+        FROM audit_logs 
+        ORDER BY created_at DESC 
+        LIMIT 5;
+    """)
+    recent_activity = []
+    for log in logs:
+        recent_activity.append({
+            "action": log["action"],
+            "details": log["details"],
+            "timestamp": log["created_at"].isoformat() if log["created_at"] else None
+        })
+        
+    return {
+        "students": total_students,
+        "departments": total_departments,
+        "activeSessions": active_discussions,
+        "recentActivity": recent_activity
+    }

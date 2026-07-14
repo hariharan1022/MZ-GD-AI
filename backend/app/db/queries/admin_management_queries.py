@@ -164,68 +164,81 @@ async def delete_student(conn: Connection, student_id: str) -> bool:
     row = await conn.fetchrow(query, student_id)
     return row is not None
 
-async def create_student_bulk(conn: Connection, students_data: List[Dict[str, Any]], default_password_hash: str) -> int:
-    imported_count = 0
-    # Process each student
-    for s in students_data:
-        roll = s.get("roll")
-        name = s.get("name")
-        dept_name = s.get("dept", "CSE")
-        year_name = s.get("year", "Year 1")
-        sec_name = s.get("section", "Section A")
-        email = f"{roll.lower()}@mountzion.ac.in" if roll else ""
-        
-        # 1. Get or create Department
-        dept_row = await conn.fetchrow("SELECT id FROM departments WHERE name = $1 OR code = $1", dept_name)
-        if not dept_row:
-            dept_row = await conn.fetchrow(
-                "INSERT INTO departments (name, code, status) VALUES ($1, $1, 'Active') RETURNING id",
-                dept_name
-            )
-        dept_id = dept_row['id']
-        
-        # 2. Get or create Year
-        # Extract number from 'Year 1', 'Year 3', etc.
-        try:
-            year_level = int(''.join(filter(str.isdigit, year_name)))
-        except ValueError:
-            year_level = 1
-        year_level = max(1, min(year_level, 5)) # keep between 1-5
-        
-        year_row = await conn.fetchrow("SELECT id FROM years WHERE department_id = $1 AND year_level = $2", dept_id, year_level)
-        if not year_row:
-            year_row = await conn.fetchrow(
-                "INSERT INTO years (department_id, year_level) VALUES ($1, $2) RETURNING id",
-                dept_id, year_level
-            )
-        year_id = year_row['id']
-        
-        # 3. Get or create Section
-        sec_row = await conn.fetchrow("SELECT id FROM sections WHERE year_id = $1 AND name = $2", year_id, sec_name)
-        if not sec_row:
-            sec_row = await conn.fetchrow(
-                "INSERT INTO sections (year_id, name) VALUES ($1, $2) RETURNING id",
-                year_id, sec_name
-            )
-        sec_id = sec_row['id']
-        
-        # 4. Upsert Student (Conflict on roll_number)
-        spr_number = f"SPR{roll}" # Generate dummy spr if not exists
-        query = """
-            INSERT INTO students (roll_number, spr_number, name, college_email, password_hash, department_id, year_id, section_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (roll_number) DO UPDATE
-            SET name = EXCLUDED.name, college_email = EXCLUDED.college_email, password_hash = EXCLUDED.password_hash, department_id = EXCLUDED.department_id, year_id = EXCLUDED.year_id, section_id = EXCLUDED.section_id
-            RETURNING id;
-        """
-        try:
-            await conn.execute(query, roll, spr_number, name, email, default_password_hash, dept_id, year_id, sec_id)
-            imported_count += 1
-        except Exception as e:
-            print(f"Failed to insert student {roll}: {e}")
-            pass
+async def create_audit_log(conn: Connection, action: str, details: str, admin_id: Optional[str] = None) -> str:
+    query = """
+        INSERT INTO audit_logs (admin_id, action, details)
+        VALUES ($1, $2, $3)
+        RETURNING id::varchar;
+    """
+    return await conn.fetchval(query, admin_id, action, details)
+
+async def create_student_bulk(conn: Connection, students_data: List[Dict[str, Any]], default_password_hash: str) -> Dict[str, int]:
+    inserted_count = 0
+    updated_count = 0
+    
+    async with conn.transaction():
+        # Process each student inside transaction
+        for s in students_data:
+            roll = s.get("roll")
+            name = s.get("name")
+            dept_name = s.get("dept", "CSE")
+            year_name = s.get("year", "Year 1")
+            sec_name = s.get("section", "Section A")
             
-    return imported_count
+            # Prioritize provided email from spreadsheet
+            email = s.get("email")
+            if not email:
+                email = f"{roll.lower()}@mountzion.ac.in" if roll else ""
+            
+            # 1. Get or create Department
+            dept_row = await conn.fetchrow("SELECT id FROM departments WHERE name = $1 OR code = $1", dept_name)
+            if not dept_row:
+                dept_row = await conn.fetchrow(
+                    "INSERT INTO departments (name, code, status) VALUES ($1, $1, 'Active') RETURNING id",
+                    dept_name
+                )
+            dept_id = dept_row['id']
+            
+            # 2. Get or create Year
+            try:
+                year_level = int(''.join(filter(str.isdigit, year_name)))
+            except ValueError:
+                year_level = 1
+            year_level = max(1, min(year_level, 5))
+            
+            year_row = await conn.fetchrow("SELECT id FROM years WHERE department_id = $1 AND year_level = $2", dept_id, year_level)
+            if not year_row:
+                year_row = await conn.fetchrow(
+                    "INSERT INTO years (department_id, year_level) VALUES ($1, $2) RETURNING id",
+                    dept_id, year_level
+                )
+            year_id = year_row['id']
+            
+            # 3. Get or create Section
+            sec_row = await conn.fetchrow("SELECT id FROM sections WHERE year_id = $1 AND name = $2", year_id, sec_name)
+            if not sec_row:
+                sec_row = await conn.fetchrow(
+                    "INSERT INTO sections (year_id, name) VALUES ($1, $2) RETURNING id",
+                    year_id, sec_name
+                )
+            sec_id = sec_row['id']
+            
+            # 4. Upsert Student (Conflict on roll_number)
+            spr_number = f"SPR{roll}"
+            query = """
+                INSERT INTO students (roll_number, spr_number, name, college_email, password_hash, department_id, year_id, section_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (roll_number) DO UPDATE
+                SET name = EXCLUDED.name, college_email = EXCLUDED.college_email, password_hash = EXCLUDED.password_hash, department_id = EXCLUDED.department_id, year_id = EXCLUDED.year_id, section_id = EXCLUDED.section_id
+                RETURNING (xmax = 0) AS is_inserted;
+            """
+            res = await conn.fetchrow(query, roll, spr_number, name, email, default_password_hash, dept_id, year_id, sec_id)
+            if res['is_inserted']:
+                inserted_count += 1
+            else:
+                updated_count += 1
+                
+    return {"inserted": inserted_count, "updated": updated_count}
 
 
 # --- Discussion Topics ---

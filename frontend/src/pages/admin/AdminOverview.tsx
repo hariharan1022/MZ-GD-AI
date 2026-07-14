@@ -9,15 +9,23 @@ export default function AdminOverview() {
     departments: 0,
     activeSessions: 0,
   });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
-    // In a real app, fetch these stats from the backend
-    // For now, we mock some data based on the requirements
-    setStats({
-      students: 1250,
-      departments: 6,
-      activeSessions: 3,
-    });
+    const fetchOverview = async () => {
+      try {
+        const res = await api.get("/admin/analytics/overview");
+        setStats({
+          students: res.data.students || 0,
+          departments: res.data.departments || 0,
+          activeSessions: res.data.activeSessions || 0
+        });
+        setRecentActivity(res.data.recentActivity || []);
+      } catch (err) {
+        console.error("Failed to fetch admin overview statistics:", err);
+      }
+    };
+    fetchOverview();
   }, []);
 
   return (
@@ -82,27 +90,26 @@ export default function AdminOverview() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <div>
-                  <p className="text-sm font-medium">Discussion Completed: AI & Ethics</p>
-                  <p className="text-xs text-muted-foreground">CSE - Year 3 - Section A • 10 mins ago</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                <div>
-                  <p className="text-sm font-medium">New Session Created</p>
-                  <p className="text-xs text-muted-foreground">Mechanical - Year 2 - Section B • 1 hour ago</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                <div>
-                  <p className="text-sm font-medium">120 Students Imported</p>
-                  <p className="text-xs text-muted-foreground">IT Department • 3 hours ago</p>
-                </div>
-              </div>
+              {recentActivity.map((activity, idx) => {
+                const dateStr = activity.timestamp 
+                  ? new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                  : "Just now";
+                const dotColors = ["bg-green-500", "bg-blue-500", "bg-purple-500", "bg-amber-500", "bg-rose-500"];
+                const color = dotColors[idx % dotColors.length];
+                
+                return (
+                  <div key={idx} className="flex items-center gap-4">
+                    <div className={`w-2 h-2 rounded-full ${color}`}></div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{activity.action}</p>
+                      <p className="text-xs text-muted-foreground">{activity.details} • {dateStr}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              {recentActivity.length === 0 && (
+                <p className="text-sm text-slate-400 dark:text-slate-600">No recent administrative activities.</p>
+              )}
             </div>
           </CardContent>
         </Card>
