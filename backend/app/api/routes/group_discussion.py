@@ -9,6 +9,10 @@ import math
 import logging
 
 logger = logging.getLogger(__name__)
+file_handler = logging.FileHandler(r'C:\Users\VISHAL~1\AppData\Local\Temp\gd_error.log')
+file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+logger.addHandler(file_handler)
+logger.setLevel(logging.DEBUG)
 router = APIRouter()
 
 # ─────────────────────────────────────────────
@@ -60,6 +64,17 @@ async def gd_generate_groups(
     admin: dict = Depends(get_current_admin),
     conn: Connection = Depends(get_db)
 ):
+    try:
+        return await _generate_groups_impl(body, admin, conn)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Generation error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _generate_groups_impl(body: dict, admin: dict, conn: Connection):
     department_id = body.get("department_id")
     group_size = body.get("group_size", 6)
     use_ai = body.get("use_ai", True)
@@ -79,6 +94,17 @@ async def gd_generate_groups(
     if len(students) == 0:
         raise HTTPException(status_code=400, detail="No active students found")
 
+    # Clean up any stale DRAFT session for this department + leftover assignments
+    stale = await conn.fetch("SELECT id FROM gd_sessions WHERE department_id = $1 AND status = 'DRAFT'", department_id)
+    for s in stale:
+        stale_groups = await conn.fetch("SELECT id FROM gd_groups WHERE session_id = $1", s["id"])
+        for g in stale_groups:
+            await conn.execute("DELETE FROM gd_assignments WHERE group_id = $1", g["id"])
+        await conn.execute("DELETE FROM gd_groups WHERE session_id = $1", s["id"])
+    await conn.execute("DELETE FROM gd_sessions WHERE department_id = $1 AND status = 'DRAFT'", department_id)
+    for s in students:
+        await conn.execute("DELETE FROM gd_assignments WHERE student_id = $1", str(s["id"]))
+
     total = len(students)
     num_groups = max(1, math.ceil(total / group_size))
     base_size = total // num_groups
@@ -92,15 +118,12 @@ async def gd_generate_groups(
             SELECT AVG(overall_score) as avg_score FROM student_scores WHERE student_id = $1
         """, sid)
         comm_score = float(score_row["avg_score"]) if score_row and score_row["avg_score"] else None
-
-        # Composite score: use comm_score if available, else XP/100 as proxy, else random
         if use_ai and comm_score is not None:
             score_val = comm_score
         elif use_ai:
             score_val = min(100, (s["xp"] or 0) / 10)
         else:
             score_val = random.uniform(0, 100)
-
         scored.append({
             "id": sid,
             "name": s["name"],
@@ -112,11 +135,8 @@ async def gd_generate_groups(
     if use_ai:
         scored.sort(key=lambda x: x["score"], reverse=True)
         groups = [[] for _ in range(num_groups)]
-        # Assign top students round-robin to seed groups
         for i, student in enumerate(scored):
-            group_idx = i % num_groups
-            groups[group_idx].append(student)
-        # Sort groups by total score and redistribute if needed
+            groups[i % num_groups].append(student)
         groups = [sorted(g, key=lambda x: x["score"], reverse=True) for g in groups]
     else:
         random.shuffle(scored)
@@ -133,8 +153,6 @@ async def gd_generate_groups(
     """, session_id, admin_id, department_id, group_size, total, num_groups)
 
     group_records = []
-    all_assignments = []
-
     for g_idx, group_students in enumerate(groups):
         gid = str(uuid.uuid4())
         group_number = g_idx + 1
@@ -143,16 +161,12 @@ async def gd_generate_groups(
             INSERT INTO gd_groups (id, session_id, group_number, member_count, status)
             VALUES ($1, $2, $3, $4, 'ACTIVE')
         """, gid, session_id, group_number, member_count)
-
-        member_names = []
         for student in group_students:
             aid = str(uuid.uuid4())
             await conn.execute("""
                 INSERT INTO gd_assignments (id, group_id, student_id, student_name, roll_number, score)
                 VALUES ($1, $2, $3, $4, $5, $6)
             """, aid, gid, student["id"], student["name"], student["roll_number"], round(student["score"], 1))
-            member_names.append(student["name"])
-
         group_records.append({
             "id": gid,
             "group_number": group_number,
@@ -254,14 +268,13 @@ async def gd_regenerate_groups(
         await conn.execute("DELETE FROM gd_assignments WHERE group_id = $1", g["id"])
     await conn.execute("DELETE FROM gd_groups WHERE session_id = $1", session_id)
 
-    # Re-generate using the same endpoint logic
+    # Re-generate using the same logic
     body_copy = {
         "department_id": str(session["department_id"]),
         "group_size": session["group_size"],
         "use_ai": True
     }
-    # Re-call generation logic (inline to avoid dependency loop)
-    return await gd_generate_groups(body_copy, admin, conn)
+    return await _generate_groups_impl(body_copy, admin, conn)
 
 
 @router.post("/gd/lock")
@@ -270,6 +283,17 @@ async def gd_lock_groups(
     admin: dict = Depends(get_current_admin),
     conn: Connection = Depends(get_db)
 ):
+    try:
+        return await _lock_groups_impl(body, admin, conn)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Lock error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _lock_groups_impl(body: dict, admin: dict, conn: Connection):
     session_id = body.get("session_id")
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
@@ -281,22 +305,24 @@ async def gd_lock_groups(
     await conn.execute("UPDATE gd_groups SET locked = 1 WHERE session_id = $1", session_id)
     await conn.execute("UPDATE gd_sessions SET status = 'LOCKED' WHERE id = $1", session_id)
 
-    # Also create discussion_sessions + discussion_groups + group_members for integration
-    # with the existing Active Discussion module
     from datetime import date, datetime
     today_str = date.today().isoformat()
     now_str = datetime.now().strftime("%H:%M:%S")
 
-    # Pick a random topic
     topic = await conn.fetchrow("SELECT id, title FROM discussion_topics ORDER BY RANDOM() LIMIT 1")
     topic_id = str(topic["id"]) if topic else None
     topic_title = topic["title"] if topic else "Group Discussion"
 
     ds_id = str(uuid.uuid4())
+    dept_id = str(session["department_id"])
+    year_row = await conn.fetchrow("SELECT id FROM years WHERE department_id = $1 LIMIT 1", dept_id)
+    year_id = str(year_row["id"]) if year_row else dept_id
+    section_row = await conn.fetchrow("SELECT id FROM sections WHERE year_id = $1 LIMIT 1", year_id)
+    section_id = str(section_row["id"]) if section_row else year_id
     await conn.execute("""
         INSERT INTO discussion_sessions (id, admin_id, department_id, year_id, section_id, group_size, discussion_date, discussion_time, preparation_time_minutes, discussion_duration_minutes, status)
-        VALUES ($1, $2, $3, (SELECT id FROM years WHERE department_id = $3 LIMIT 1), (SELECT id FROM sections WHERE year_id = (SELECT id FROM years WHERE department_id = $3 LIMIT 1) LIMIT 1), $4, $5, $6, 2, 15, 'ACTIVE')
-    """, ds_id, str(admin["id"]), str(session["department_id"]), session["group_size"], today_str, now_str)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 2, 15, 'ACTIVE')
+    """, ds_id, str(admin["id"]), dept_id, year_id, section_id, session["group_size"], today_str, now_str)
 
     groups = await conn.fetch("SELECT id, group_number FROM gd_groups WHERE session_id = $1", session_id)
     for g in groups:

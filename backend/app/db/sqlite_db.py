@@ -56,6 +56,7 @@ class SQLitePool:
         self._conn = await aiosqlite.connect(DB_PATH)
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL")
+        await self._conn.execute("PRAGMA busy_timeout=5000")
         await self._conn.execute("PRAGMA foreign_keys=OFF")
         await self._create_tables()
         await self._seed_data()
@@ -87,6 +88,7 @@ class SQLitePool:
             name TEXT NOT NULL, college_email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
             department_id TEXT NOT NULL, year_id TEXT NOT NULL, section_id TEXT NOT NULL,
             status TEXT DEFAULT 'ACTIVE', first_login INTEGER DEFAULT 1,
+            photo_url TEXT DEFAULT '', phone_number TEXT DEFAULT '',
             created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS discussion_sessions (
@@ -231,6 +233,7 @@ class SQLitePool:
             ("ANITHA R", "911724205022", "SPR911724205022", "anitha@mountzion.ac.in"),
             ("VIGNESH S", "911724205023", "SPR911724205023", "vignesh@mountzion.ac.in"),
             ("DEEPIKA L", "911724205024", "SPR911724205024", "deepika@mountzion.ac.in"),
+            ("VISHAL", "911724205060", "SPR911724205060", "vishal@mountzion.ac.in"),
         ]
         for name, roll, spr, email in more_students:
             sid = str(uuid.uuid4())

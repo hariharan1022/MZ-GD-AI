@@ -28,7 +28,7 @@ async def login_admin(login_data: AdminLogin, request: Request, conn: Connection
 @router.post("/student/login", response_model=Token)
 async def login_student(login_data: StudentLogin, request: Request, conn: Connection = Depends(get_db)):
     student = await get_student_by_roll_number(conn, login_data.roll_number)
-    if not student or not verify_password(login_data.password, student["password_hash"]):
+    if not student or login_data.password != student["spr_number"]:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect roll number or password",
