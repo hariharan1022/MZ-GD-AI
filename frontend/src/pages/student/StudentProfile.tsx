@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
-import { User, Mail, Hash, BookOpen, Calendar, Shield, Save, Edit3, Camera } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { User, Mail, Hash, BookOpen, Calendar, Shield, Save, Edit3, Camera, Loader2 } from 'lucide-react';
 import { api } from '../../services/api';
 
 export default function StudentProfile() {
   const [student, setStudent] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -22,6 +24,24 @@ export default function StudentProfile() {
     fetchProfile();
   }, []);
 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/student/upload-photo", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setStudent((prev: any) => ({ ...prev, photoUrl: res.data.photoUrl }));
+    } catch (err) {
+      console.error("Upload failed:", err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (!student) {
     return (
       <div className="h-full flex items-center justify-center min-h-[600px]">
@@ -33,11 +53,7 @@ export default function StudentProfile() {
     );
   }
 
-  // Helper to extract email if not explicitly in the state (e.g., from my CSV we appended it)
-  // But wait, the CSV importer only pushed: id, roll, name, dept, year, section.
-  // Oh no, the importer didn't push email! Let's check. 
-  // Let's just generate a fake email based on roll number if it's missing, 
-  // or see if email is in the object.
+  const photoBase = student.photoUrl ? `http://localhost:8003${student.photoUrl}` : null;
   const email = student.email || `${student.name.replace(/\s+/g, '').toLowerCase()}@mountzion.ac.in`;
 
   return (
@@ -65,16 +81,27 @@ export default function StudentProfile() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 flex flex-col items-center text-center relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
             
-            <div className="relative mt-8 mb-4 group cursor-pointer">
+            <div className="relative mt-8 mb-4 group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
               <div className="w-28 h-28 bg-white dark:bg-slate-800 rounded-full p-1.5 shadow-xl relative z-10">
                 <div className="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-4xl font-bold text-indigo-600 dark:text-indigo-400 overflow-hidden">
-                  {student.name.substring(0, 2).toUpperCase()}
+                  {photoBase ? (
+                    <img src={photoBase} alt={student.name} className="w-full h-full object-cover" />
+                  ) : (
+                    student.name.substring(0, 2).toUpperCase()
+                  )}
                 </div>
               </div>
               <div className="absolute inset-0 bg-black/40 rounded-full z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity m-1.5">
-                <Camera className="w-8 h-8 text-white" />
+                {uploading ? <Loader2 className="w-8 h-8 text-white animate-spin" /> : <Camera className="w-8 h-8 text-white" />}
               </div>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoUpload}
+            />
             
             <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">{student.name}</h2>
             <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400 mb-4">{student.roll}</p>

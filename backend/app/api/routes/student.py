@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+import uuid
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from asyncpg import Connection
 from app.db.connection import get_db
 from app.api.dependencies import get_current_student
@@ -84,6 +87,27 @@ async def update_student_profile(
     """, update_data.name, update_data.email, update_data.spdNo, update_data.phone, update_data.photoUrl, student_id)
     
     return {"success": True, "message": "Profile updated successfully"}
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+@router.post("/upload-photo")
+async def upload_photo(
+    file: UploadFile = File(...),
+    current_student: dict = Depends(get_current_student),
+    conn: Connection = Depends(get_db)
+):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
+    ext = os.path.splitext(file.filename or "photo.jpg")[1] or ".jpg"
+    filename = f"student_{current_student['id']}_{uuid.uuid4().hex[:8]}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    contents = await file.read()
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, lambda: open(filepath, "wb").write(contents))
+    photo_url = f"/uploads/{filename}"
+    await conn.execute("UPDATE students SET photo_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", photo_url, current_student["id"])
+    return {"photoUrl": photo_url, "message": "Photo uploaded successfully"}
 
 @router.get("/leaderboard")
 async def get_department_leaderboard(current_student: dict = Depends(get_current_student), conn: Connection = Depends(get_db)):
