@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, Radio, Loader2, Sparkles, MessageSquare, Hash, UserCheck, CheckCircle2, BookOpen, Trophy, RefreshCw } from "lucide-react";
+import { Users, Radio, Loader2, Sparkles, MessageSquare, Hash, UserCheck, CheckCircle2, BookOpen, Trophy, RefreshCw, Timer, Lightbulb } from "lucide-react";
 import api from "@/lib/api";
 
 export default function AIGroupDiscussion() {
@@ -9,7 +9,9 @@ export default function AIGroupDiscussion() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [fetchingMeta, setFetchingMeta] = useState(true);
-
+  const [timer, setTimer] = useState(0);
+  const [timerPhase, setTimerPhase] = useState<"idle" | "prep" | "discussion">("idle");
+  const timerRef = useRef<any>(null);
   const navigate = useNavigate();
 
   const fetchMeta = async () => {
@@ -32,15 +34,49 @@ export default function AIGroupDiscussion() {
 
   useEffect(() => { fetchMeta(); }, []);
 
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
   const handleStart = async () => {
     setLoading(true);
     setSession(null);
+    setTimerPhase("idle");
+    setTimer(0);
+    if (timerRef.current) clearInterval(timerRef.current);
     try {
       const res = await api.post("/discussions/ai-start", { count: 6 });
       setSession(res.data);
     } catch (e: any) {
       alert(e.response?.data?.detail || "Failed to start group discussion");
     } finally { setLoading(false); }
+  };
+
+  const startTimer = () => {
+    const prepSec = (session?.session?.prepTime || 2) * 60;
+    const talkSec = (session?.session?.duration || 15) * 60;
+    setTimer(prepSec);
+    setTimerPhase("prep");
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setTimer((prev) => {
+        if (prev <= 1) {
+          if (timerPhase === "prep") {
+            setTimerPhase("discussion");
+            return talkSec;
+          }
+          clearInterval(timerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const formatTimer = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
   };
 
   if (fetchingMeta) {
@@ -64,9 +100,9 @@ export default function AIGroupDiscussion() {
           <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
             <Users className="w-5 h-5 text-indigo-500" /> Available Students ({students.length})
           </h2>
-          <span className="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">AI will pick 6 randomly</span>
+          <span className="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">AI picks 6 randomly</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3">
           {students.map((s) => (
             <div key={s.id} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 text-center border border-slate-100 dark:border-slate-700">
               <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mx-auto mb-2">
@@ -77,7 +113,7 @@ export default function AIGroupDiscussion() {
             </div>
           ))}
         </div>
-        <div className="mt-6 flex justify-center">
+        <div className="mt-6 flex justify-center gap-4">
           <button
             onClick={handleStart}
             disabled={loading || students.length < 2}
@@ -89,9 +125,36 @@ export default function AIGroupDiscussion() {
         </div>
       </div>
 
-      {/* Results */}
       {session && (
         <>
+          {/* Timer Section */}
+          <div className={`rounded-2xl p-6 text-white shadow-xl ${timerPhase === "prep" ? "bg-amber-500" : timerPhase === "discussion" ? "bg-red-500" : "bg-slate-400"}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Timer className="w-8 h-8" />
+                <div>
+                  <h3 className="font-bold text-lg">
+                    {timerPhase === "idle" && "Discussion Timer"}
+                    {timerPhase === "prep" && "Preparation Phase"}
+                    {timerPhase === "discussion" && "Discussion in Progress"}
+                  </h3>
+                  <p className="text-white/80 text-sm">
+                    {timerPhase === "idle" && `${session.session.prepTime}min prep + ${session.session.duration}min discussion`}
+                    {timerPhase !== "idle" && (timerPhase === "prep" ? "Start discussing when timer ends" : "Time remaining")}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-4xl font-mono font-bold">{formatTimer(timer)}</div>
+              </div>
+            </div>
+            {timerPhase === "idle" && (
+              <button onClick={startTimer} className="mt-4 w-full py-2 bg-white/20 hover:bg-white/30 rounded-xl font-semibold transition-colors">
+                Start Timer
+              </button>
+            )}
+          </div>
+
           {/* Session Info */}
           <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-8 text-white shadow-xl">
             <div className="flex items-center gap-3 mb-4">
@@ -114,6 +177,18 @@ export default function AIGroupDiscussion() {
               </span>
             </div>
           </div>
+
+          {/* AI Discussion Guide */}
+          {session.ai_guide && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
+              <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+                <Lightbulb className="w-5 h-5 text-amber-500" /> AI-Generated Discussion Guide
+              </h2>
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-5 border border-amber-100 dark:border-amber-800/30">
+                <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">{session.ai_guide}</p>
+              </div>
+            </div>
+          )}
 
           {/* Selected Members */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
@@ -147,14 +222,20 @@ export default function AIGroupDiscussion() {
             </div>
           </div>
 
-          {/* Start Another */}
-          <div className="text-center pb-8">
+          {/* Actions */}
+          <div className="flex justify-center gap-4 pb-8">
+            <button
+              onClick={() => window.location.href = "/student/active"}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-md"
+            >
+              <Radio className="w-4 h-4" /> Go to Active Discussion
+            </button>
             <button
               onClick={handleStart}
               disabled={loading}
               className="inline-flex items-center gap-2 px-6 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
             >
-              <RefreshCw className="w-4 h-4" /> Start New AI Group Discussion
+              <RefreshCw className="w-4 h-4" /> Start New
             </button>
           </div>
         </>

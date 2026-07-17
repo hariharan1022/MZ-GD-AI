@@ -112,6 +112,26 @@ class SQLitePool:
             joined_at TEXT, is_online INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')),
             UNIQUE(group_id, student_id)
         );
+        CREATE TABLE IF NOT EXISTS gd_sessions (
+            id TEXT PRIMARY KEY, admin_id TEXT NOT NULL, department_id TEXT NOT NULL,
+            group_size INTEGER NOT NULL DEFAULT 6, total_students INTEGER NOT NULL,
+            total_groups INTEGER NOT NULL, status TEXT DEFAULT 'DRAFT',
+            created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS gd_groups (
+            id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES gd_sessions(id),
+            group_number INTEGER NOT NULL, member_count INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'ACTIVE', locked INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(session_id, group_number)
+        );
+        CREATE TABLE IF NOT EXISTS gd_assignments (
+            id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES gd_groups(id),
+            student_id TEXT NOT NULL UNIQUE, student_name TEXT NOT NULL,
+            roll_number TEXT NOT NULL, score REAL DEFAULT 0,
+            assigned_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(group_id, student_id)
+        );
         CREATE TABLE IF NOT EXISTS login_history (
             id TEXT PRIMARY KEY, student_id TEXT, admin_id TEXT, ip_address TEXT,
             user_agent TEXT, login_time TEXT DEFAULT (datetime('now'))

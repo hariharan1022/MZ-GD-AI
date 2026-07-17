@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.routes import auth, admin_management, admin_analytics, admin_gamification, admin_system_ops, student, discussions, dashboard, practice, challenge, credits
+from app.api.routes import auth, admin_management, admin_analytics, admin_gamification, admin_system_ops, student, discussions, dashboard, practice, challenge, credits, group_discussion
 
 router = APIRouter()
 
@@ -14,6 +14,8 @@ router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 router.include_router(practice.router, prefix="/student", tags=["Practice"])
 router.include_router(challenge.router, prefix="/student", tags=["Challenge"])
 router.include_router(credits.router, prefix="/student", tags=["Credits"])
+router.include_router(group_discussion.router, prefix="/admin", tags=["Group Discussion"])
+router.include_router(group_discussion.router, prefix="/student", tags=["Group Discussion"])
 
 @router.get("/")
 async def api_root():

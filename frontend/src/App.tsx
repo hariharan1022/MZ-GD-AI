@@ -53,6 +53,7 @@ import AdminData from "./pages/admin/AdminData";
 import AdminLogsActivity from "./pages/admin/AdminLogsActivity";
 import AdminLogsSystem from "./pages/admin/AdminLogsSystem";
 import AdminHelp from "./pages/admin/AdminHelp";
+import AdminGroupDiscussion from "./pages/admin/AdminGroupDiscussion";
 
 import "./App.css";
 
@@ -85,6 +86,7 @@ function App() {
             <Route path="rooms" element={<AdminRooms />} />
             <Route path="topics" element={<AdminTopics />} />
             <Route path="practice" element={<AdminPractice />} />
+            <Route path="gd" element={<AdminGroupDiscussion />} />
             
             {/* Performance */}
             <Route path="reports" element={<AdminReports />} />

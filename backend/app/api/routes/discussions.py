@@ -5,6 +5,28 @@ from app.api.dependencies import get_current_student
 from typing import Optional, List
 import random
 import uuid
+import httpx
+import logging
+import re
+
+logger = logging.getLogger(__name__)
+
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODEL = "qwen2:0.5b"
+
+async def call_ollama(prompt: str, max_tokens: int = 200, timeout: int = 30) -> str:
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(OLLAMA_URL, json={
+                "model": MODEL, "prompt": prompt, "stream": False,
+                "options": {"temperature": 0.7, "max_tokens": max_tokens}
+            })
+            if resp.status_code == 200:
+                return resp.json().get("response", "").strip()
+            logger.warning(f"Ollama returned status {resp.status_code}")
+    except Exception as e:
+        logger.warning(f"Ollama call failed: {e}")
+    return ""
 
 router = APIRouter()
 
@@ -80,6 +102,19 @@ async def ai_start_discussion(
     else:
         chosen_topic = {"title": "General Discussion", "description": "Open topic discussion", "id": None}
 
+    # AI-generated discussion guide
+    ai_guide = ""
+    ai_prompt = f"""Generate 3 discussion points for a group discussion on: "{chosen_topic['title']}"
+
+    Topic context: {chosen_topic.get('description', '')}
+
+    Format each point as a short question or prompt. Keep it 2-3 sentences total."""
+    guide_raw = await call_ollama(ai_prompt, max_tokens=150, timeout=30)
+    if guide_raw:
+        ai_guide = guide_raw.strip().strip('"\'')
+        # Remove any "Discussion Points:" prefix
+        ai_guide = re.sub(r'^(Discussion Points|Points|Questions)[:\s]*', '', ai_guide, flags=re.IGNORECASE)
+
     admin = await conn.fetchrow("SELECT id FROM admins LIMIT 1")
     if not admin:
         raise HTTPException(status_code=500, detail="No admin found")
@@ -133,7 +168,8 @@ async def ai_start_discussion(
             "status": "ACTIVE"
         },
         "members": member_list,
-        "total_available": len(rows)
+        "total_available": len(rows),
+        "ai_guide": ai_guide
     }
 
 

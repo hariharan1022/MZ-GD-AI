@@ -5,7 +5,7 @@ import {
   MessageSquare, MessagesSquare, Library, BrainCircuit, Mic2,
   FileText, BarChart3, Trophy, Medal, Bell, CalendarDays, 
   UserCheck, Database, Settings, User, Activity, TerminalSquare, 
-  LifeBuoy, LogOut, Search, Menu, X, Sun, Moon
+  LifeBuoy, LogOut, Search, Menu, X, Sun, Moon, ListOrdered
 } from 'lucide-react';
 import { useTheme } from '../components/ThemeProvider';
 
@@ -32,6 +32,7 @@ const sidebarGroups = [
       { name: 'Rooms', icon: MessagesSquare, path: '/admin/rooms' },
       { name: 'Topics Library', icon: Library, path: '/admin/topics' },
       { name: 'Practice Rooms', icon: Mic2, path: '/admin/practice' },
+      { name: 'GD Management', icon: ListOrdered, path: '/admin/gd' },
     ]
   },
   {
